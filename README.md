@@ -1,6 +1,6 @@
 # Skor Mabar
 
-Aplikasi web (PWA) untuk komunitas olahraga raket: skor langsung per lapangan, antrean main, absensi, klasemen dengan rating Elo, profil pemain, dan daftar turnamen.
+Aplikasi web (PWA) untuk komunitas olahraga raket (badminton, pickleball, tenis, padel): skor langsung per lapangan, antrean main, absensi, klasemen per mabar, profil pemain dengan rating, dan daftar turnamen.
 
 Aplikasi ini terdiri dari dua halaman:
 
@@ -143,11 +143,8 @@ Alamatnya seperti `https://namaanda.github.io/skor-mabar/`.
 ## Langkah 5. Penggunaan pertama (panitia)
 
 1. Di HP atau tablet panitia, buka alamat aplikasi (misalnya `https://skor-mabar.web.app`).
-2. Isi form **Siapkan komunitas**: nama, cabang, tempat, jumlah lapangan, aturan poin, dan nama perangkat ini.
-   - Badminton: target 21, batas 30.
-   - Pickleball rally scoring: target 11 atau 15, batas 0.
+2. Isi form **Siapkan komunitas**: nama komunitas, tempat, dan nama perangkat ini.
 3. Tekan **Simpan dan mulai**. Muncul **kode pemulihan**: catat dan simpan di tempat aman. Kode ini dipakai jika semua perangkat panitia hilang atau datanya terhapus.
-4. Tambah anggota di tab **Anggota**.
 
 ### Menambah perangkat panitia lain
 
@@ -157,12 +154,44 @@ Alamatnya seperti `https://namaanda.github.io/skor-mabar/`.
 
 Jika HP panitia hilang atau data browsernya terhapus, buka aplikasi di perangkat baru lalu masukkan **kode pemulihan**. Kode pemulihan baru bisa dibuat di Pengaturan, dan kode lama otomatis tidak berlaku.
 
-### Alur setiap sesi mabar
+### Berpindah antara Mabar dan Turnamen
 
-1. **Anggota** → nyalakan sakelar hadir untuk yang datang. Kehadiran otomatis kosong lagi esok hari.
-2. **Sesi hari ini** → di lapangan kosong tekan **Susun pertandingan**, ketuk slot, lalu **Pilih** pemain dari antrean.
-3. **Mulai main** → catat poin dengan tombol **+1 Biru** dan **+1 Merah**. Penonton melihat skor yang sama secara langsung.
-4. Setelah gim selesai, tekan **Simpan hasil**. Rating dan klasemen diperbarui otomatis.
+Di bagian atas aplikasi selalu ada tombol **🏸 Mabar** dan **🏆 Turnamen**. Di HP, tombol ini tampil selebar layar tepat di bawah nama komunitas. Ketuk untuk berpindah kapan saja, termasuk di tampilan penonton.
+
+### Membuat mabar baru
+
+Setiap sesi main dibuat sebagai satu **mabar** tersendiri, dengan klasemennya sendiri.
+
+1. Mode **Mabar** → tab **Daftar mabar** → **+ Mabar baru**.
+2. Isi nama, tanggal, cabang, jenis (ganda atau tunggal), jumlah lapangan, dan aturan skor. Aturan otomatis terisi sesuai cabang:
+
+   | Cabang | Aturan bawaan | Bisa diubah |
+   |---|---|---|
+   | Badminton | 21 poin, maks 30, ganda | Target dan batas poin |
+   | Pickleball | 11 poin rally, ganda | Target dan batas poin |
+   | Tenis | 1 set 6 game, advantage, tiebreak, tunggal | Jumlah set (1 / best of 3), game per set (4 / 6 / 8), advantage atau golden point, tiebreak |
+   | Padel | 1 set 6 game, golden point, tiebreak, ganda | Sama seperti tenis |
+
+3. Centang **Salin daftar hadir** jika pesertanya kurang lebih sama dengan mabar sebelumnya.
+4. Tekan **Buat mabar**. Aplikasi langsung membuka tab **Absensi** untuk menandai yang hadir.
+
+Mabar lama tetap tersimpan di daftar. Tekan **Selesaikan** jika sesi sudah usai (mabar selesai tidak bisa diubah, tetapi bisa dibuka lagi), atau **Hapus** untuk membuangnya.
+
+### Alur dalam satu mabar
+
+1. **Absensi** → nyalakan sakelar hadir untuk yang datang. Pemain baru atau tamu bisa langsung ditambahkan di sini.
+2. **Lapangan** → di lapangan kosong tekan **Susun pertandingan**, ketuk slot, lalu **Pilih** pemain dari antrean.
+3. **Mulai main** → catat poin dengan **+1 Biru** dan **+1 Merah**. Untuk tenis dan padel, aplikasi otomatis menghitung 15–30–40, deuce atau golden point, game, set, dan tiebreak.
+4. Setelah pertandingan selesai, tekan **Simpan hasil**.
+5. **Klasemen** → peringkat hanya untuk mabar ini: menang, kalah, persentase menang, dan selisih poin (atau selisih game untuk tenis dan padel).
+
+### Membuat turnamen baru
+
+Mode **Turnamen** → **+ Turnamen baru** → isi nama, cabang, format, jenis, peserta, lalu susun pasangan dan unggulan.
+
+### Rating pemain
+
+Setiap pemain punya rating yang berlanjut lintas mabar. Rating tidak dipakai untuk klasemen, hanya sebagai acuan panitia saat menyusun tim dan ditampilkan di profil pemain.
 
 ---
 
@@ -187,20 +216,21 @@ Penting untuk iPhone dan iPad: aplikasi yang dipasang ke layar utama punya penyi
 
 ## Langkah 7. Bagikan ke peserta dan penonton
 
-Buka tab **Bagikan ke penonton** di aplikasi panitia. Di sana ada:
+Buka tab **Bagikan** di mode Mabar aplikasi panitia. Di sana ada:
 
-- **QR** yang mengarah ke tampilan penonton (`.../lihat.html`). Cetak dan tempel di GOR.
+- **QR** yang mengarah ke tampilan penonton (`.../lihat.html`), berisi daftar semua mabar dan turnamen. Cetak dan tempel di GOR.
+- **QR per mabar** (tombol QR di daftar mabar atau di dalam mabar) yang langsung membuka skor mabar itu.
 - **Tampilkan layar penuh**: QR besar untuk ditunjukkan di tablet saat sesi dimulai.
 - **Salin tautan** dan **Bagikan**: untuk dikirim ke grup WhatsApp.
 
-Penonton tidak perlu instal apa pun. Tampilan penonton berisi skor langsung, antrean, klasemen, daftar pemain, dan turnamen, dan diperbarui otomatis.
+Penonton tidak perlu instal apa pun. Tampilan penonton berisi daftar mabar, skor langsung, antrean, klasemen per mabar, pemain hadir, dan turnamen, semuanya diperbarui otomatis.
 
 ---
 
 ## Memperbarui aplikasi
 
 1. Ubah file yang diperlukan.
-2. Buka `sw.js`, naikkan versinya, misalnya `skor-mabar-v1` → `skor-mabar-v2`. Tanpa langkah ini, HP anggota tetap memakai versi lama yang tersimpan.
+2. Buka `sw.js`, naikkan versinya, misalnya `skor-mabar-v3` → `skor-mabar-v4`. Tanpa langkah ini, HP anggota tetap memakai versi lama yang tersimpan.
 3. Terbitkan ulang (`firebase deploy` atau unggah ke GitHub).
 4. Anggota mendapat versi baru setelah menutup lalu membuka kembali aplikasinya.
 
@@ -242,15 +272,26 @@ Tab **Pengaturan → Unduh cadangan (JSON)** menyimpan seluruh data komunitas. L
 
 ```
 komunitas/{KOMUNITAS_ID}/
-  settings      {name, sport, place, courts, target, cap, minMonthly}
+  settings      {name, place}
   members/{id}  {name, rating, hist:[{t,r}], guest, joined}
-  matches/{id}  {sess:"YYYY-MM-DD", a:[id,id], b:[id,id], sa, sb, t, start, court, delta}
-  courts/{n}    {draft:{a:[id|0,id|0], b:[...]}} atau {match:{a, b, pts:[0|1,...], start}}
-  present       {date:"YYYY-MM-DD", list:{memberId: waktuHadir}}
-  tournaments/{id} {name, fmt, jenis, status, created, linked, affect, entries:[[{id,name}]]}
+  events/{id}   {type:"mabar", name, date, sport, jenis, courts, status:"aktif"|"selesai", created,
+                 rules:{type:"rally", target, cap} | {type:"tennis", sets, games, golden, tb},
+                 present:{memberId: waktuHadir},
+                 lap/{n}: {draft:{a:[...], b:[...]}} | {match:{a, b, pts:[0|1,...], start}}}
+  matches/{id}  {ev, a:[id..], b:[id..], sa, sb, w:0|1, skor:"6–4", t, start, court, delta}
+  tournaments/{id} {name, sport, fmt, jenis, status, created, linked, affect, entries:[[{id,name}]]}
   owners/{uid}  kode yang dipakai untuk mendaftar ("pendiri" untuk perangkat pertama)
   ownerNames/{uid} {name, at}
 rahasia/{KOMUNITAS_ID}/undangan/{kode}  {exp, pemulihan?}   (hanya bisa dibaca panitia)
 ```
 
+`sa` dan `sb` berisi total poin (rally) atau total game (tenis/padel), dipakai untuk kolom selisih di klasemen.
+
 Rating memakai Elo dengan K = 24. Rating tim adalah rata-rata rating kedua pemain, dan kedua pemain dalam satu tim menerima perubahan rating yang sama.
+
+
+---
+
+## Catatan pembaruan v3
+
+Struktur data berubah (mabar kini disimpan per acara di `events`). Data dari versi sebelumnya tidak terbaca otomatis. Jika Anda sudah sempat memakai versi lama, hapus data lewat Pengaturan lalu mulai lagi.
