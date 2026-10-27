@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "komunitas": {
+      "$kid": {
+        ".read": true,
+        ".write": "auth != null && (!data.exists() || data.child('owners').child(auth.uid).exists())",
+        "owners": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && newData.isString() && root.child('rahasia').child($kid).child('undangan').child(newData.val()).child('exp').val() > now"
+          }
+        }
+      }
+    },
+    "rahasia": {
+      "$kid": {
+        ".read": "auth != null && root.child('komunitas').child($kid).child('owners').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('komunitas').child($kid).child('owners').child(auth.uid).exists()"
+      }
+    }
+  }
+}
