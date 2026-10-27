@@ -245,3 +245,7 @@ td small.w,td small.l{font-size:12px}
 .evopen:hover b{text-decoration:underline}
 .evopen .muted{font-size:14px}
 .slotsel{flex:1;min-width:150px;border:1px solid var(--hair);background:var(--glass-hi);border-radius:12px;padding:8px 10px;font-weight:600}
+.minebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-radius:18px;padding:10px 14px;margin-bottom:14px}
+.minebar b{margin-right:4px}
+.minebar .chip{cursor:pointer}
+code{font-size:.9em;background:var(--glass-hi);padding:1px 5px;border-radius:6px}

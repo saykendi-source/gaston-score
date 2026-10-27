@@ -97,7 +97,7 @@ Buka `js/config.js` dan ganti `FIREBASE_CONFIG: null` dengan konfigurasi dari la
 
 ```js
 window.APP_CONFIG = {
-  KOMUNITAS_ID: 'mabar-selasa',
+  KOMUNITAS_ID: null,
   FIREBASE_CONFIG: {
     apiKey: "AIza....",
     authDomain: "skor-mabar.firebaseapp.com",
@@ -108,7 +108,7 @@ window.APP_CONFIG = {
 };
 ```
 
-`KOMUNITAS_ID` boleh diganti, misalnya `pb-rajawali-2026`. Pakai nama yang tidak mudah ditebak, karena perangkat pertama yang menyiapkan komunitas dengan ID ini akan menjadi panitia. Segera lakukan langkah 5 setelah menerbitkan. Satu proyek Firebase bisa dipakai beberapa komunitas dengan ID berbeda, masing-masing di-hosting dengan `config.js` sendiri.
+`KOMUNITAS_ID` biarkan `null`. Dengan begitu satu alamat aplikasi bisa dipakai banyak komunitas, masing-masing dengan kode komunitas sendiri (lihat **Banyak komunitas** di langkah 5). Isi dengan kode tertentu hanya jika aplikasi ini khusus untuk satu komunitas.
 
 `apiKey` Firebase memang boleh terlihat publik. Yang melindungi data adalah aturan di `database.rules.json`.
 
@@ -142,28 +142,63 @@ Alamatnya seperti `https://namaanda.github.io/skor-mabar/`.
 
 ## Langkah 5. Penggunaan pertama (panitia)
 
-1. Di HP atau tablet panitia, buka alamat aplikasi (misalnya `https://skor-mabar.web.app`).
-2. Isi form **Siapkan komunitas**: nama komunitas, tempat, dan nama perangkat ini.
-3. Tekan **Simpan dan mulai**. Muncul **kode pemulihan**: catat dan simpan di tempat aman. Kode ini dipakai jika semua perangkat panitia hilang atau datanya terhapus.
+1. Di HP atau tablet panitia, buka alamat aplikasi (misalnya `https://skor-mabar.web.app`). Muncul layar **Komunitas**.
+2. Di **Buat komunitas baru**, isi nama komunitas (misalnya `PB Sadewa`) lalu tekan **Buat**. Aplikasi membuat kode komunitas unik, misalnya `pb-sadewa-k7m2`.
+3. Isi form **Siapkan komunitas**: nama, tempat, dan nama perangkat ini.
+4. Tekan **Simpan dan mulai**. Muncul **kode pemulihan**: catat dan simpan di tempat aman. Kode ini dipakai jika semua perangkat panitia hilang atau datanya terhapus.
 
-### Menambah perangkat panitia lain
+Selanjutnya aplikasi panitia selalu membuka komunitas terakhir. Tombol **Komunitas** di bagian atas dipakai untuk berpindah komunitas, membuat komunitas lain, atau bergabung ke komunitas lain.
 
-1. Di perangkat panitia yang sudah terdaftar: **Pengaturan → Buat kode undangan**. Muncul kode 6 huruf, berlaku 15 menit, sekali pakai.
-2. Di HP panitia baru: buka alamat aplikasi. Karena belum terdaftar, muncul layar **Daftarkan perangkat panitia**. Masukkan kode tadi dan nama perangkat.
-3. Daftar perangkat panitia terlihat di **Pengaturan**, dan akses perangkat lain bisa dicabut dari sana.
+### Banyak komunitas dalam satu aplikasi
 
-Jika HP panitia hilang atau data browsernya terhapus, buka aplikasi di perangkat baru lalu masukkan **kode pemulihan**. Kode pemulihan baru bisa dibuat di Pengaturan, dan kode lama otomatis tidak berlaku.
+Komunitas A (misalnya mabar di GOR Sadewa) dan komunitas B (di GOR Funminton) bisa memakai alamat aplikasi yang sama pada waktu yang sama tanpa saling mengganggu:
+
+- Setiap komunitas membuat komunitasnya sendiri lewat **Buat komunitas baru**, sehingga punya kode komunitas berbeda.
+- **Data terpisah sepenuhnya:** pemain, mabar, klasemen, turnamen, panitia, dan wasit. Panitia komunitas A tidak bisa melihat atau mengubah komunitas B dari aplikasinya, dan aturan database menolak perubahan dari perangkat yang bukan panitia atau wasit komunitas itu.
+- **QR penonton berisi kode komunitas** (`lihat.html?k=pb-sadewa-k7m2`), jadi penonton komunitas A hanya melihat mabar komunitas A.
+- Satu HP bisa terdaftar di beberapa komunitas dan berpindah lewat tombol **Komunitas**.
+
+Catatan: semua komunitas di satu proyek Firebase berbagi batas sekitar 100 koneksi bersamaan pada paket gratis. Jika beberapa komunitas sering main di jam yang sama dengan banyak penonton, pertimbangkan paket Blaze, atau proyek Firebase terpisah (alamat aplikasi dan `config.js` sendiri) untuk setiap komunitas.
+
+### Menambah panitia dan wasit
+
+Ada dua peran perangkat:
+
+| Peran | Bisa melakukan |
+|---|---|
+| **Panitia** | Semuanya: membuat dan menyelesaikan mabar, absensi, pemain, turnamen, pengaturan, mengundang dan mencabut perangkat |
+| **Wasit** | Hanya di mabar yang sedang berlangsung: menyusun pemain di lapangan, mencatat skor, menyimpan hasil. Wasit bisa melihat klasemen dan absensi, tetapi tidak bisa mengubahnya |
+
+Batasan wasit dijaga oleh aturan database, bukan hanya disembunyikan di tampilan.
+
+1. Di perangkat panitia: **Pengaturan → Undang wasit** (atau **Undang panitia**). Muncul QR, kode komunitas, dan kode undangan 6 huruf yang berlaku 15 menit dan sekali pakai. Buat satu undangan untuk setiap HP.
+2. Di HP baru:
+   - **Android:** pindai QR undangan, isi nama perangkat (misalnya `HP Wasit Lapangan 2`), lalu **Daftarkan**.
+   - **iPhone/iPad:** pasang aplikasinya dulu ke layar utama, buka dari ikonnya, lalu di layar **Komunitas → Gabung** isi kode komunitas dan kode undangan.
+3. Daftar perangkat panitia dan wasit terlihat di **Pengaturan**, dan aksesnya bisa dicabut dari sana, misalnya setelah acara selesai.
+
+Jika HP panitia hilang atau data browsernya terhapus, buka aplikasi di perangkat baru, pilih **Gabung**, lalu masukkan kode komunitas dan **kode pemulihan**.
+
+### Beberapa wasit di satu mabar: "Lapangan saya"
+
+Di tab **Lapangan**, setiap panitia dan wasit bisa memilih lapangan yang dipegangnya lewat baris **Lapangan saya** (misalnya hanya *Lap. 2*). Setelah dipilih:
+
+- Lapangan miliknya tampil paling atas, dan hanya lapangan itu yang punya tombol susun pemain dan skor. Lapangan lain hanya menampilkan skor, jadi tidak ada salah tekan.
+- Setiap lapangan diberi label **Dipegang: HP Wasit 2**. Jika ada dua perangkat memegang lapangan yang sama, muncul peringatan, karena dua orang yang mencatat skor di lapangan yang sama bisa membuat ketukan hilang.
+- Pilihan ini tersimpan di HP masing-masing dan bisa diubah kapan saja. Jika tidak ada yang dipilih, semua lapangan bisa dikelola.
+
+Skor di setiap lapangan disimpan terpisah, jadi wasit Lapangan 1 dan Lapangan 2 bisa mencatat bersamaan dan semua penonton melihat keduanya bergerak langsung.
 
 ### Berpindah antara Mabar dan Turnamen
 
-Di bagian atas aplikasi selalu ada tombol **🏸 Mabar** dan **🏆 Turnamen**. Di HP, tombol ini tampil selebar layar tepat di bawah nama komunitas. Ketuk untuk berpindah kapan saja, termasuk di tampilan penonton.
+Di bagian atas aplikasi selalu ada tombol **Mabar** dan **Turnamen**. Ketuk untuk berpindah kapan saja, termasuk di tampilan penonton.
 
 ### Membuat mabar baru
 
 Setiap sesi main dibuat sebagai satu **mabar** tersendiri, dengan klasemennya sendiri.
 
 1. Mode **Mabar** → tab **Daftar mabar** → **+ Mabar baru**.
-2. Isi nama, tanggal, cabang, jenis (ganda atau tunggal), jumlah lapangan, dan aturan skor. Aturan otomatis terisi sesuai cabang:
+2. Isi nama, lokasi (misalnya `GOR Sadewa`), tanggal, cabang, jenis (ganda atau tunggal), jumlah lapangan, dan aturan skor. Aturan otomatis terisi sesuai cabang:
 
    | Cabang | Aturan bawaan | Bisa diubah |
    |---|---|---|
@@ -246,7 +281,8 @@ Tab **Pengaturan → Unduh cadangan (JSON)** menyimpan seluruh data komunitas. L
 
 - **Batas koneksi Firebase gratis:** sekitar 100 perangkat terhubung bersamaan, termasuk perangkat panitia dan TV.
 - **iPhone:** getaran dari web tidak didukung. Fitur lain berjalan normal.
-- **Tabrakan data:** jika dua panitia mengubah lapangan yang *sama* di detik yang sama, perubahan terakhir yang berlaku. Sebaiknya satu lapangan dipegang satu panitia.
+- **Tabrakan data:** jika dua perangkat mencatat skor di lapangan yang *sama* pada detik yang sama, satu ketukan bisa hilang. Pakai **Lapangan saya** agar satu lapangan dipegang satu wasit.
+- **Wasit dan rating:** aturan database mengizinkan wasit memperbarui rating pemain saat menyimpan hasil. Undang wasit yang dipercaya, dan cabut aksesnya setelah acara.
 - **Turnamen:** versi ini mencakup pendaftaran peserta, penyusunan pasangan, unggulan, dan status turnamen. Pencatatan skor per pertandingan turnamen dan bagan otomatis direncanakan di versi berikutnya.
 - **Keamanan tanpa akun:** siapa pun yang memegang perangkat panitia bisa mengubah data. Kunci layar HP panitia, dan cabut akses perangkat yang hilang dari Pengaturan.
 - **Belum ada:** notifikasi giliran main, absen mandiri lewat QR, dan aplikasi jam tangan.
@@ -258,9 +294,12 @@ Tab **Pengaturan → Unduh cadangan (JSON)** menyimpan seluruh data komunitas. L
 | Gejala | Penyebab dan solusi |
 |---|---|
 | Tombol **Instal** tidak muncul di Android | Aplikasi harus dibuka lewat `https://`. Coba muat ulang halaman sekali, atau pakai menu ⋮ → Instal aplikasi. |
+| Penonton melihat **Skor belum bisa dilihat dari HP lain** atau **Belum ada data** padahal panitia sudah main | Aplikasi masih mode lokal (di aplikasi panitia ada label kuning **Mode lokal**). Isi `FIREBASE_CONFIG` di `js/config.js`, terbitkan ulang, lalu siapkan komunitas lagi di HP panitia, karena data mode lokal tidak ikut pindah ke Firebase. |
 | Muncul **Gagal memuat Firebase** | Periksa `js/config.js`, terutama tanda kutip, koma, dan `databaseURL`. |
 | Muncul **Gagal masuk anonim** | Login Anonymous belum diaktifkan (langkah 2c). |
-| HP panitia muncul layar **Daftarkan perangkat panitia** | Perangkat ini belum terdaftar, atau data browsernya terhapus. Masukkan kode undangan dari panitia lain atau kode pemulihan. |
+| HP panitia muncul layar **Daftarkan perangkat ini** | Perangkat ini belum terdaftar di komunitas itu, atau data browsernya terhapus. Masukkan kode undangan atau kode pemulihan. |
+| Penonton melihat **Pindai QR dari panitia** | Tautan tidak berisi kode komunitas. Bagikan ulang QR atau tautan dari tab **Bagikan**. |
+| Wasit mendapat **permission denied** saat mencatat skor | Aturan database versi baru belum dipasang, atau mabar sudah diselesaikan. Jalankan `firebase deploy` atau salin ulang `database.rules.json`. |
 | Kode undangan ditolak | Sudah lewat 15 menit atau sudah dipakai. Buat kode baru. |
 | Muncul **Gagal menyimpan: permission denied** | Aturan database belum terpasang. Jalankan `firebase deploy` atau salin `database.rules.json` ke tab Rules. |
 | Perubahan file tidak terlihat di HP | Versi di `sw.js` belum dinaikkan. Naikkan versinya, terbitkan ulang, lalu tutup-buka aplikasi. |
@@ -271,18 +310,20 @@ Tab **Pengaturan → Unduh cadangan (JSON)** menyimpan seluruh data komunitas. L
 ## Struktur data (untuk pengembang)
 
 ```
-komunitas/{KOMUNITAS_ID}/
+komunitas/{kodeKomunitas}/
   settings      {name, place}
   members/{id}  {name, rating, hist:[{t,r}], guest, joined}
-  events/{id}   {type:"mabar", name, date, sport, jenis, courts, status:"aktif"|"selesai", created,
+  events/{id}   {type:"mabar", name, lokasi, date, sport, jenis, courts, status:"aktif"|"selesai", created,
                  rules:{type:"rally", target, cap} | {type:"tennis", sets, games, golden, tb},
                  present:{memberId: waktuHadir},
-                 lap/{n}: {draft:{a:[...], b:[...]}} | {match:{a, b, pts:[0|1,...], start}}}
+                 lap/{n}: {draft:{a:[...], b:[...]}, match:{a, b, pts:[0|1,...], start}, pegang:{uid: namaPerangkat}}}
   matches/{id}  {ev, a:[id..], b:[id..], sa, sb, w:0|1, skor:"6–4", t, start, court, delta}
   tournaments/{id} {name, sport, fmt, jenis, status, created, linked, affect, entries:[[{id,name}]]}
-  owners/{uid}  kode yang dipakai untuk mendaftar ("pendiri" untuk perangkat pertama)
+  owners/{uid}  kode yang dipakai mendaftar sebagai panitia ("pendiri" untuk perangkat pertama)
   ownerNames/{uid} {name, at}
-rahasia/{KOMUNITAS_ID}/undangan/{kode}  {exp, pemulihan?}   (hanya bisa dibaca panitia)
+  wasit/{uid}   kode yang dipakai mendaftar sebagai wasit
+  wasitNames/{uid} {name, at}
+rahasia/{kodeKomunitas}/undangan/{kode}  {exp, peran:"panitia"|"wasit", pemulihan?}   (hanya bisa dibaca panitia)
 ```
 
 `sa` dan `sb` berisi total poin (rally) atau total game (tenis/padel), dipakai untuk kolom selisih di klasemen.
@@ -293,6 +334,10 @@ Rating memakai Elo dengan K = 24. Rating tim adalah rata-rata rating kedua pemai
 ---
 
 ## Catatan pembaruan
+
+**v6:** banyak komunitas dalam satu aplikasi (layar **Komunitas**, kode komunitas di alamat), peran **wasit** terbatas, **Lapangan saya** dengan label perangkat pemegang, dan kolom **lokasi** di setiap mabar. **Aturan database berubah, jadi wajib dipasang ulang** (`firebase deploy` atau salin `database.rules.json` ke tab Rules). Jika Anda sudah memakai versi lama dengan `KOMUNITAS_ID` tertentu, data lama tetap ada: buka `index.html?k=kodelama` sekali di HP panitia, atau isi kode itu di `KOMUNITAS_ID`.
+
+**v5:** pesan yang jelas di tampilan penonton saat aplikasi masih mode lokal atau gagal memuat data.
 
 **v4:** opsi data contoh dihapus; pemilihan pemain di lapangan memakai dropdown berisi antrean.
 

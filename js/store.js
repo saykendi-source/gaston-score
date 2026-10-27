@@ -1,10 +1,11 @@
 /* Lapisan data: mode lokal (localStorage) atau mode online (Firebase Realtime Database).
-   Perangkat panitia masuk otomatis secara anonim. Penonton (lihat.html) hanya membaca. */
+   Setiap komunitas punya ID sendiri (parameter ?k= di alamat). Perangkat panitia dan wasit
+   masuk otomatis secara anonim; penonton (lihat.html) hanya membaca. */
 (function(){
   'use strict';
   var FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 
-  function empty(){ return {settings:null, members:{}, matches:{}, courts:{}, present:null, tournaments:{}, owners:{}, ownerNames:{}}; }
+  function empty(){ return {settings:null, members:{}, matches:{}, events:{}, tournaments:{}, owners:{}, ownerNames:{}, wasit:{}, wasitNames:{}}; }
   function norm(s){ var e = empty(); s = s || {}; for (var k in s) e[k] = s[k]; return e; }
   function clean(v){ return v === undefined ? null : JSON.parse(JSON.stringify(v)); }
   function setPath(obj, path, val){
@@ -17,21 +18,22 @@
     if (val === null || val === undefined) delete o[k]; else o[k] = val;
   }
 
-  window.createStore = function(viewOnly){
+  window.createStore = function(viewOnly, kid){
     var cfg = window.APP_CONFIG || {};
-    var KID = cfg.KOMUNITAS_ID || 'komunitas';
+    var KID = kid;
     var LS = 'skor-mabar:' + KID, LS_SECRET = LS + ':rahasia';
     var state = empty(), listeners = [];
-    var s = {mode:'local', ready:false, online:true, user:null, error:null};
+    var s = {mode: cfg.FIREBASE_CONFIG ? 'cloud' : 'local', ready:false, online:true, user:null, error:null};
     var db, dbm, auth, am;
 
     function emit(){ listeners.forEach(function(f){ try{ f(); }catch(e){ console.error(e); } }); }
     function loadLocal(){ try{ state = norm(JSON.parse(localStorage.getItem(LS))); }catch(e){ state = empty(); } }
     function saveLocal(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
-    function base(){ return dbm.ref(db, 'komunitas/' + KID); }
+    function base(p){ return dbm.ref(db, 'komunitas/' + KID + (p ? '/' + p : '')); }
     function secretRef(p){ return dbm.ref(db, 'rahasia/' + KID + (p ? '/' + p : '')); }
 
     var api = {
+      get kid(){ return KID; },
       get state(){ return state; },
       get mode(){ return s.mode; },
       get ready(){ return s.ready; },
@@ -39,20 +41,25 @@
       get uid(){ return s.user ? s.user.uid : (s.mode === 'local' ? 'lokal' : null); },
       get error(){ return s.error; },
       get viewOnly(){ return !!viewOnly; },
-      get isAdmin(){
-        if (viewOnly) return false;
-        if (s.mode === 'local') return true;
-        return !!(s.user && state.owners && state.owners[s.user.uid]);
+      /* 'panitia', 'wasit', atau null */
+      get role(){
+        if (viewOnly) return null;
+        if (s.mode === 'local') return 'panitia';
+        if (!s.user) return null;
+        if (state.owners && state.owners[s.user.uid]) return 'panitia';
+        if (state.wasit && state.wasit[s.user.uid]) return 'wasit';
+        return null;
       },
+      get isAdmin(){ return api.role === 'panitia'; },
       onChange: function(f){ listeners.push(f); },
 
       init: function(){
-        if (!cfg.FIREBASE_CONFIG){
-          s.mode = 'local'; loadLocal(); s.ready = true; emit();
+        if (!KID){ s.ready = true; emit(); return Promise.resolve(); }
+        if (s.mode === 'local'){
+          loadLocal(); s.ready = true; emit();
           window.addEventListener('storage', function(e){ if (e.key === LS){ loadLocal(); emit(); } });
           return Promise.resolve();
         }
-        s.mode = 'cloud';
         var mods = [import(FB + 'firebase-app.js'), import(FB + 'firebase-database.js')];
         if (!viewOnly) mods.push(import(FB + 'firebase-auth.js'));
         return Promise.all(mods).then(function(m){
@@ -78,7 +85,7 @@
         return dbm.update(base(), fixed).catch(function(err){ s.error = 'Gagal menyimpan: ' + err.message; emit(); throw err; });
       },
 
-      /* Data rahasia (kode undangan & pemulihan): tidak bisa dibaca penonton. */
+      /* Data rahasia (kode undangan & pemulihan): hanya bisa dibaca panitia. */
       setSecret: function(path, val){
         if (s.mode === 'local'){
           var sec = {}; try { sec = JSON.parse(localStorage.getItem(LS_SECRET)) || {}; } catch(e){}
@@ -92,17 +99,20 @@
         return dbm.get(secretRef()).then(function(x){ return x.val() || {}; });
       },
 
-      /* Mendaftarkan perangkat ini sebagai panitia dengan kode undangan/pemulihan. */
+      /* Mendaftarkan perangkat ini dengan kode undangan/pemulihan.
+         Dicoba sebagai panitia dulu; jika kodenya kode wasit, aturan database menolak, lalu dicoba sebagai wasit. */
       claim: function(code, label){
         if (s.mode === 'local' || !s.user) return Promise.reject(new Error('Belum terhubung.'));
-        var uid = s.user.uid;
-        return dbm.set(dbm.ref(db, 'komunitas/' + KID + '/owners/' + uid), code).then(function(){
-          var p = {}; p['ownerNames/' + uid] = {name:label || 'Perangkat panitia', at:Date.now()};
-          return dbm.update(base(), p);
-        }).then(function(){
-          return dbm.get(secretRef('undangan/' + code)).then(function(x){
-            var v = x.val(); if (v && !v.pemulihan) return dbm.remove(secretRef('undangan/' + code));
-          });
+        var uid = s.user.uid, info = {name:label || 'Perangkat', at:Date.now()};
+        return dbm.set(base('owners/' + uid), code).then(function(){
+          return dbm.set(base('ownerNames/' + uid), info).then(function(){
+            return dbm.get(secretRef('undangan/' + code)).then(function(x){ var v = x.val(); if (v && !v.pemulihan) return dbm.remove(secretRef('undangan/' + code)); });
+          }).then(function(){ return 'panitia'; });
+        }, function(){
+          return dbm.set(base('wasit/' + uid), code).then(function(){
+            return dbm.set(base('wasitNames/' + uid), info);
+          }).then(function(){ return dbm.remove(secretRef('undangan/' + code)).catch(function(){}); })
+            .then(function(){ return 'wasit'; });
         });
       }
     };

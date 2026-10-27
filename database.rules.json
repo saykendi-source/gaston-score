@@ -6,15 +6,48 @@
         ".write": "auth != null && (!data.exists() || data.child('owners').child(auth.uid).exists())",
         "owners": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid && newData.isString() && root.child('rahasia').child($kid).child('undangan').child(newData.val()).child('exp').val() > now"
+            ".write": "auth != null && auth.uid === $uid && newData.isString() && root.child('rahasia/' + $kid + '/undangan/' + newData.val() + '/exp').val() > now && root.child('rahasia/' + $kid + '/undangan/' + newData.val() + '/peran').val() !== 'wasit'"
+          }
+        },
+        "wasit": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && newData.isString() && root.child('rahasia/' + $kid + '/undangan/' + newData.val() + '/exp').val() > now && root.child('rahasia/' + $kid + '/undangan/' + newData.val() + '/peran').val() === 'wasit'"
+          }
+        },
+        "wasitNames": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('komunitas/' + $kid + '/wasit/' + $uid).exists()"
+          }
+        },
+        "events": {
+          "$eid": {
+            "lap": {
+              ".write": "auth != null && root.child('komunitas/' + $kid + '/wasit/' + auth.uid).exists() && data.parent().child('status').val() === 'aktif'"
+            }
+          }
+        },
+        "matches": {
+          "$mid": {
+            ".write": "auth != null && root.child('komunitas/' + $kid + '/wasit/' + auth.uid).exists() && !data.exists()"
+          }
+        },
+        "members": {
+          "$m": {
+            "rating": { ".write": "auth != null && root.child('komunitas/' + $kid + '/wasit/' + auth.uid).exists()" },
+            "hist":   { ".write": "auth != null && root.child('komunitas/' + $kid + '/wasit/' + auth.uid).exists()" }
           }
         }
       }
     },
     "rahasia": {
       "$kid": {
-        ".read": "auth != null && root.child('komunitas').child($kid).child('owners').child(auth.uid).exists()",
-        ".write": "auth != null && root.child('komunitas').child($kid).child('owners').child(auth.uid).exists()"
+        ".read": "auth != null && root.child('komunitas/' + $kid + '/owners/' + auth.uid).exists()",
+        ".write": "auth != null && root.child('komunitas/' + $kid + '/owners/' + auth.uid).exists()",
+        "undangan": {
+          "$code": {
+            ".write": "auth != null && !newData.exists() && root.child('komunitas/' + $kid + '/wasit/' + auth.uid).val() === $code"
+          }
+        }
       }
     }
   }

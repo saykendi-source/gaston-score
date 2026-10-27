@@ -1,15 +1,32 @@
-/* Skor Mabar v3: aplikasi utama (mabar per acara, turnamen, skor rally dan tenis) */
+/* Skor Mabar v6: aplikasi utama (mabar per acara, turnamen, skor rally dan tenis) */
 (function(){
   'use strict';
   var VIEW = !!window.VIEW_ONLY;
-  var store = window.createStore(VIEW);
+  var params = new URLSearchParams(location.search);
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+  function validKid(k){ return k && /^[a-z0-9-]{3,60}$/.test(k) ? k : null; }
+  var KID = validKid(params.get('k')) || (VIEW ? null : validKid(lsGet('skor-mabar:kid-terakhir'))) || validKid((window.APP_CONFIG || {}).KOMUNITAS_ID);
+  var PICK = !VIEW && (params.has('pilih') || !KID);
+  var store = window.createStore(VIEW, PICK ? null : KID);
+  function myCommunities(){ try { return JSON.parse(lsGet('skor-mabar:daftar-komunitas')) || []; } catch(e){ return []; } }
+  function rememberCommunity(){
+    if (VIEW || !KID || !store.role) return;
+    var list = myCommunities().filter(function(x){ return x.kid !== KID; });
+    list.unshift({kid:KID, name:(store.state.settings || {}).name || KID, role:store.role});
+    lsSet('skor-mabar:daftar-komunitas', JSON.stringify(list.slice(0, 20))); lsSet('skor-mabar:kid-terakhir', KID);
+  }
+  function appBase(){ return location.href.split('#')[0].split('?')[0]; }
+  function appUrl(q){ return new URL('index.html', appBase()).href + (q ? '?' + q : ''); }
+  function inviteUrl(code){ return appUrl('k=' + encodeURIComponent(KID) + '&undangan=' + code); }
+  function slug(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'komunitas'; }
   var MIN = 60000;
   var $ = function(id){ return document.getElementById(id); };
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; }); }
   function todayStr(d){ d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
   function uid(p){ return p + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2,6); }
   function mins(t){ return Math.max(0, Math.round((Date.now() - t) / MIN)); }
-  function viewerUrl(evId){ var u = new URL('lihat.html', location.href.split('#')[0].split('?')[0]).href; return evId ? u + '#ev=' + evId : u; }
+  function viewerUrl(evId){ var u = new URL('lihat.html', appBase()).href + '?k=' + encodeURIComponent(KID || ''); return evId ? u + '#ev=' + evId : u; }
   function randCode(n){ var ch = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', out = '', b = new Uint32Array(n); (window.crypto || window.msCrypto).getRandomValues(b); for (var i = 0; i < n; i++) out += ch[b[i] % ch.length]; return out; }
   function fmtCode(c){ return c.length > 6 ? c.match(/.{1,4}/g).join('-') : c; }
   function normCode(c){ return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
@@ -69,6 +86,10 @@
   // ---------- Data ----------
   function st(){ return store.state; }
   function cfg(){ return st().settings || {}; }
+  function canScore(){ return store.role === 'panitia' || store.role === 'wasit'; }
+  function deviceName(u){ var a = (st().ownerNames || {})[u] || (st().wasitNames || {})[u]; return a ? a.name : 'Perangkat'; }
+  function mineKey(e){ return 'skor-mabar:lapsaya:' + KID + ':' + e.id; }
+  function myCourts(e){ try { return JSON.parse(lsGet(mineKey(e))) || []; } catch(err){ return []; } }
   function arr(x){ return Array.isArray(x) ? x : (x ? Object.keys(x).map(function(k){ return x[k]; }) : []); }
   function members(){ var m = st().members || {}; return Object.keys(m).map(function(id){ return Object.assign({rating:1500}, m[id], {id:id}); }); }
   function byId(id){ var m = (st().members || {})[id]; return m ? Object.assign({rating:1500, hist:[]}, m, {id:id}) : {id:id, name:'(terhapus)', rating:1500, hist:[]}; }
@@ -127,7 +148,8 @@
   function renderTop(){
     var c = cfg(), A = store.isAdmin;
     var status = store.mode === 'local' ? '<span class="statusdot local">Mode lokal</span>' : (store.online ? '<span class="statusdot">Online</span>' : '<span class="statusdot off">Offline</span>');
-    var role = VIEW ? '<span class="tag">Penonton</span>' : (A ? '<span class="tag">Panitia</span>' : '');
+    var role = VIEW ? '<span class="tag">Penonton</span>' : (A ? '<span class="tag">Panitia</span>' : store.role === 'wasit' ? '<span class="tag">Wasit</span>' : '');
+    if (!VIEW && !PICK) role += '<button class="btn" data-pilih>Komunitas</button>';
     var theme = (function(){ try { return localStorage.getItem('skor-tema') || 'auto'; } catch(e){ return 'auto'; } })();
     $('top').innerHTML =
       '<div class="brand"><b>' + esc(c.name || 'Skor Mabar') + '</b><span>' + esc(c.place || 'Skor langsung komunitas') + '</span></div>' +
@@ -141,7 +163,7 @@
     if (ui.mode === 'mabar' && ui.view === 'event'){
       var e = getEv(ui.ev);
       if (!e){ ui.view = 'list'; return renderNav(); }
-      el.innerHTML = '<div class="evhead"><button class="btn" data-back>← Semua mabar</button><div class="evtitle"><b>' + esc(e.name) + '</b><span>' + esc(e.sport) + ', ' + (e.jenis === 'tunggal' ? 'tunggal' : 'ganda') + ', ' + esc(rulesText(e.rules)) + '</span></div>' +
+      el.innerHTML = '<div class="evhead"><button class="btn" data-back>← Semua mabar</button><div class="evtitle"><b>' + esc(e.name) + '</b><span>' + (e.lokasi ? '📍 ' + esc(e.lokasi) + ' · ' : '') + esc(e.sport) + ', ' + (e.jenis === 'tunggal' ? 'tunggal' : 'ganda') + ', ' + esc(rulesText(e.rules)) + '</span></div>' +
         (e.status !== 'aktif' ? '<span class="tag">Selesai</span>' : '<span class="tag live">Berlangsung</span>') + '</div>' +
         segTabs([['skor', VIEW ? 'Skor langsung' : 'Lapangan'], ['klasemen','Klasemen'], ['hadir', VIEW ? 'Pemain hadir' : 'Absensi']], ui.tab, 'tab');
       return;
@@ -157,11 +179,25 @@
 
   // ---------- Setup & perangkat panitia ----------
   function viewSetup(){
-    if (VIEW) return '<div class="panel glass empty-state center"><h2>Belum ada data</h2><p class="muted">Panitia belum menyiapkan komunitas ini. Coba buka lagi nanti.</p></div>';
+    if (VIEW){
+      if (store.mode === 'local') return '<div class="panel glass empty-state center"><h2>Skor belum bisa dilihat dari HP lain</h2><p class="muted">Aplikasi masih berjalan dalam <b>mode lokal</b>, sehingga data hanya tersimpan di perangkat panitia. Panitia perlu mengisi konfigurasi Firebase di <code>js/config.js</code> lalu menerbitkan ulang aplikasi (README langkah 2 sampai 4).</p></div>';
+      if (store.error) return '<div class="panel glass empty-state center"><h2>Gagal memuat data</h2><p class="muted">' + esc(store.error) + '</p><p class="muted">Periksa aturan database (README langkah 4) dan isi <code>js/config.js</code>.</p></div>';
+      return '<div class="panel glass empty-state center"><h2>Belum ada data</h2><p class="muted">Panitia belum menyiapkan komunitas ini. Coba buka lagi nanti.</p></div>';
+    }
     if (store.mode === 'cloud' && !store.uid) return '<div class="panel glass empty-state center"><h2>Menghubungkan…</h2><p class="muted">Menyiapkan perangkat panitia.</p></div>';
-    return '<div class="panel glass empty-state"><h2>Siapkan komunitas</h2><p class="muted">Perangkat yang menyiapkan komunitas otomatis menjadi perangkat panitia. Tidak perlu membuat akun.</p>' + communityForm({}) +
+    return '<div class="panel glass empty-state"><h2>Siapkan komunitas</h2><p class="muted">Perangkat yang menyiapkan komunitas otomatis menjadi perangkat panitia. Tidak perlu membuat akun.</p>' + communityForm({name:params.get('n') || ''}) +
       '<label class="field" style="margin-top:12px"><span>Nama perangkat ini</span><input id="devName" placeholder="Misalnya: HP Andi atau Tablet meja panitia" maxlength="30"></label>' +
       '<div class="btns"><button class="btn primary" data-setup>Simpan dan mulai</button></div></div>';
+  }
+  function viewLanding(){
+    var list = myCommunities(), cloud = store.mode === 'cloud';
+    return '<div class="empty-state" style="max-width:640px">' +
+      (list.length ? '<div class="panel glass"><h2 style="margin-top:0">Komunitas di perangkat ini</h2><ul class="pairs">' + list.map(function(x){ return '<li><span>' + esc(x.name) + '<small class="muted" style="display:block;font-weight:400">' + esc(x.kid) + ', ' + (x.role === 'wasit' ? 'wasit' : 'panitia') + '</small></span><button class="btn primary" data-gokid="' + esc(x.kid) + '">Buka</button></li>'; }).join('') + '</ul></div>' : '') +
+      '<div class="panel glass" style="margin-top:14px"><h2 style="margin-top:0">Buat komunitas baru</h2><p class="muted" style="margin:0">Setiap komunitas punya data sendiri: pemain, mabar, turnamen, dan QR penonton. Komunitas lain tidak bisa melihat atau mengubahnya dari aplikasi mereka.</p>' +
+      '<div class="form"><input id="newKomName" placeholder="Nama komunitas, misalnya PB Sadewa" maxlength="40"><button class="btn primary" data-newkom>Buat</button></div></div>' +
+      '<div class="panel glass" style="margin-top:14px"><h2 style="margin-top:0">Gabung sebagai panitia atau wasit</h2><p class="muted" style="margin:0">Minta panitia komunitas membuat kode undangan, lalu pindai QR-nya atau isi kedua kode di bawah.</p>' +
+      '<div class="formgrid"><label class="field"><span>Kode komunitas</span><input id="joinKid" autocomplete="off" autocapitalize="none" placeholder="pb-sadewa-k7m2"></label><label class="field"><span>Kode undangan</span><input id="joinCode" autocomplete="off" autocapitalize="characters" placeholder="K7M2QX"></label></div>' +
+      '<div class="btns"><button class="btn primary" data-joinkom>Lanjutkan</button></div>' + (cloud ? '' : '<p class="hint">Bergabung dengan kode hanya bisa di mode online.</p>') + '</div></div>';
   }
   function communityForm(c){
     return '<div class="formgrid">' +
@@ -170,21 +206,31 @@
   }
   function readCommunity(){ return {name: $('sName').value.trim() || 'Komunitas Raket', place: $('sPlace').value.trim()}; }
   function viewClaim(){
-    return '<div class="panel glass empty-state"><h2>Daftarkan perangkat panitia</h2><p class="muted">Perangkat ini belum terdaftar sebagai panitia <b>' + esc(cfg().name || '') + '</b>. Minta kode undangan dari panitia lain (menu Pengaturan), atau masukkan kode pemulihan.</p>' +
-      '<div class="formgrid" style="grid-template-columns:1fr"><label class="field"><span>Kode undangan atau pemulihan</span><input id="claimCode" autocomplete="off" autocapitalize="characters" placeholder="Contoh: K7M2QX"></label>' +
-      '<label class="field"><span>Nama perangkat ini</span><input id="devName" placeholder="Misalnya: HP Budi" maxlength="30"></label></div>' +
-      '<p class="err" id="claimErr" hidden></p><div class="btns"><button class="btn primary" data-claim>Daftarkan</button><a class="btn" href="' + esc(viewerUrl()) + '" style="text-decoration:none">Buka tampilan penonton</a></div></div>';
+    return '<div class="panel glass empty-state"><h2>Daftarkan perangkat ini</h2><p class="muted">Perangkat ini belum terdaftar di komunitas <b>' + esc(cfg().name || KID) + '</b>. Masukkan kode undangan panitia atau wasit, atau kode pemulihan.</p>' +
+      '<div class="formgrid" style="grid-template-columns:1fr"><label class="field"><span>Kode komunitas</span><input value="' + esc(KID) + '" disabled></label>' +
+      '<label class="field"><span>Kode undangan atau pemulihan</span><input id="claimCode" autocomplete="off" autocapitalize="characters" placeholder="Contoh: K7M2QX" value="' + esc(normCode(params.get('undangan') || '')) + '"></label>' +
+      '<label class="field"><span>Nama perangkat ini</span><input id="devName" placeholder="Misalnya: HP Wasit Lapangan 2" maxlength="30"></label></div>' +
+      '<p class="err" id="claimErr" hidden></p><div class="btns"><button class="btn primary" data-claim>Daftarkan</button><a class="btn" href="' + esc(viewerUrl()) + '" style="text-decoration:none">Buka tampilan penonton</a><button class="btn" data-pilih>Komunitas lain</button></div></div>';
   }
   function viewDevices(){
-    var names = st().ownerNames || {}, owners = st().owners || {};
-    var rows = Object.keys(owners).map(function(u){
-      var n = names[u] ? names[u].name : 'Perangkat panitia';
-      return '<li><span>' + esc(n) + (u === store.uid ? ' <span class="badge n">Perangkat ini</span>' : '') + '</span>' + (u !== store.uid ? '<button class="x" data-revoke="' + u + '">Cabut</button>' : '') + '</li>';
-    }).join('');
-    return '<div class="panel glass"><h3>Perangkat panitia</h3><p class="muted" style="margin:0">Tidak ada akun. Untuk menambah panitia, buat kode undangan lalu masukkan kode itu di HP panitia baru.</p>' +
-      '<ul class="pairs" style="margin-top:8px">' + rows + '</ul>' +
-      '<div class="btns"><button class="btn primary" data-invite>Buat kode undangan</button><button class="btn" data-newrecovery>Buat kode pemulihan baru</button></div>' +
-      '<p class="hint">Kode undangan berlaku 15 menit dan hanya sekali pakai. Kode pemulihan dipakai jika semua perangkat panitia hilang atau datanya terhapus.</p></div>';
+    var rowsOf = function(map, names, kind){ return Object.keys(map || {}).map(function(u){
+      var n = names && names[u] ? names[u].name : (kind === 'wasit' ? 'Perangkat wasit' : 'Perangkat panitia');
+      return '<li><span>' + esc(n) + (u === store.uid ? ' <span class="badge n">Perangkat ini</span>' : '') + '</span>' + (u !== store.uid ? '<button class="x" data-revoke="' + kind + ':' + u + '">Cabut</button>' : '') + '</li>';
+    }).join('') || '<li class="muted">Belum ada.</li>'; };
+    return '<div class="panel glass"><h3>Perangkat panitia</h3><p class="muted" style="margin:0">Panitia bisa mengatur semuanya: mabar, pemain, absensi, turnamen, pengaturan, dan perangkat.</p>' +
+      '<ul class="pairs" style="margin-top:8px">' + rowsOf(st().owners, st().ownerNames, 'panitia') + '</ul>' +
+      '<h3 style="margin-top:16px">Perangkat wasit</h3><p class="muted" style="margin:0">Wasit hanya bisa menyusun pemain di lapangan dan mencatat skor pada mabar yang sedang berlangsung. Batasan ini juga dijaga oleh aturan database.</p>' +
+      '<ul class="pairs" style="margin-top:8px">' + rowsOf(st().wasit, st().wasitNames, 'wasit') + '</ul>' +
+      '<div class="btns"><button class="btn primary" data-invite="wasit">Undang wasit</button><button class="btn" data-invite="panitia">Undang panitia</button><button class="btn" data-newrecovery>Kode pemulihan baru</button></div>' +
+      '<p class="hint">Kode undangan berlaku 15 menit dan sekali pakai, jadi buat satu kode untuk setiap HP. Kode pemulihan dipakai jika semua perangkat panitia hilang.</p></div>';
+  }
+  function showInvite(code, peran){
+    var url = inviteUrl(code);
+    $('dlgBody').innerHTML = '<div class="center"><h2>Undangan ' + peran + '</h2><p class="muted">Pindai QR ini dengan HP ' + peran + ' baru. Untuk iPhone, pasang aplikasinya dulu, lalu isi kode komunitas dan kode undangan secara manual dari layar <b>Komunitas → Gabung</b>.</p>' +
+      '<div class="qrbox">' + qrSvg(url) + '</div><p class="muted" style="margin:8px 0 0">Kode komunitas</p><div class="bigcode" style="font-size:22px;letter-spacing:.02em;margin:4px 0">' + esc(KID) + '</div>' +
+      '<p class="muted" style="margin:8px 0 0">Kode undangan (berlaku 15 menit)</p><div class="bigcode" style="margin:4px 0">' + esc(code) + '</div>' +
+      '<div class="btns" style="justify-content:center"><button class="btn" data-copylink="' + esc(url) + '">Salin tautan undangan</button><button class="btn" data-close>Tutup</button></div></div>';
+    $('dlg').showModal();
   }
   function showCode(title, code, note){
     $('dlgBody').innerHTML = '<h2>' + esc(title) + '</h2><p class="muted">' + note + '</p><div class="bigcode">' + esc(fmtCode(code)) + '</div><div class="btns"><button class="btn primary" data-copycode="' + code + '">Salin kode</button><button class="btn" data-close>Tutup</button></div>';
@@ -196,7 +242,7 @@
       var und = (sec && sec.undangan) || {}, p = [];
       Object.keys(und).forEach(function(k){ if (und[k] && und[k].pemulihan) p.push(store.setSecret('undangan/' + k, null)); });
       return Promise.all(p);
-    }).catch(function(){}).then(function(){ return store.setSecret('undangan/' + code, {exp:4102444800000, pemulihan:true, dibuat:Date.now()}); })
+    }).catch(function(){}).then(function(){ return store.setSecret('undangan/' + code, {exp:4102444800000, pemulihan:true, peran:'panitia', dibuat:Date.now()}); })
       .then(function(){ showCode('Kode pemulihan', code, 'Catat dan simpan kode ini di tempat aman. Kode ini bisa mendaftarkan perangkat baru sebagai panitia kapan saja. Kode pemulihan sebelumnya tidak berlaku lagi.'); });
   }
 
@@ -209,7 +255,7 @@
       var n = evMatches(e.id).length, h = Object.keys(e.present).length, live = courtsOf(e).filter(function(c){ return c.match; }).length;
       return '<div class="tcard glass evcard"><button class="evopen" data-open="' + e.id + '" aria-label="Buka ' + esc(e.name) + '">' +
         '<span class="tag ' + (e.status === 'aktif' ? 'live' : '') + '">' + (e.status === 'aktif' ? (live ? live + ' lapangan main' : 'Berlangsung') : 'Selesai') + '</span>' +
-        '<b style="margin-top:8px">' + esc(e.name) + '</b><span class="muted">' + fmtDate(e.date) + '</span><span class="muted">' + esc(e.sport) + ' ' + (e.jenis === 'tunggal' ? 'tunggal' : 'ganda') + ', ' + h + ' hadir, ' + n + ' pertandingan</span></button>' +
+        '<b style="margin-top:8px">' + esc(e.name) + '</b><span class="muted">' + fmtDate(e.date) + (e.lokasi ? ', 📍 ' + esc(e.lokasi) : '') + '</span><span class="muted">' + esc(e.sport) + ' ' + (e.jenis === 'tunggal' ? 'tunggal' : 'ganda') + ', ' + h + ' hadir, ' + n + ' pertandingan</span></button>' +
         (A ? '<div class="btns"><button class="btn" data-evstatus="' + e.id + '">' + (e.status === 'aktif' ? 'Selesaikan' : 'Buka lagi') + '</button><button class="btn" data-evshare="' + e.id + '">QR</button><button class="btn danger" data-evdel="' + e.id + '">Hapus</button></div>' : '') + '</div>';
     }).join('') + '</div>';
   }
@@ -219,7 +265,7 @@
   function newMf(){
     var d = new Date(), last = events()[0];
     var sport = last ? last.sport : 'Badminton';
-    var f = {name:'Mabar ' + HARI[d.getDay()] + ' ' + d.getDate() + ' ' + BULAN[d.getMonth()], date:todayStr(), sport:sport, courts: last ? last.courts : 3, copyPresent:false};
+    var f = {name:'Mabar ' + HARI[d.getDay()] + ' ' + d.getDate() + ' ' + BULAN[d.getMonth()], date:todayStr(), sport:sport, courts: last ? last.courts : 3, lokasi: (last && last.lokasi) || cfg().place || '', copyPresent:false};
     return applySport(f, sport, last && last.sport === sport ? last : null);
   }
   function applySport(f, sport, from){
@@ -242,6 +288,7 @@
     return '<div class="btns" style="margin:0 0 12px"><button class="btn" data-back-list>← Batal</button></div>' +
       '<div class="panel glass" style="max-width:760px"><h2 style="margin-top:0">Mabar baru</h2><div class="formgrid">' +
       '<label class="field"><span>Nama mabar</span><input data-mf="name" value="' + esc(f.name) + '" maxlength="50"></label>' +
+      '<label class="field"><span>Lokasi</span><input data-mf="lokasi" value="' + esc(f.lokasi || '') + '" placeholder="GOR Sadewa" maxlength="50"></label>' +
       '<label class="field"><span>Tanggal</span><input type="date" data-mf="date" value="' + f.date + '"></label>' +
       '<label class="field"><span>Cabang</span>' + sel('sport', Object.keys(SPORTS).map(function(k){ return [k,k]; }), f.sport) + '</label>' +
       '<label class="field"><span>Jenis</span>' + sel('jenis', [['ganda','Ganda'],['tunggal','Tunggal']], f.jenis) + '</label>' +
@@ -263,11 +310,13 @@
       return '<select class="slotsel" data-slotsel="' + c.id + ':' + side + ':' + i + '" aria-label="Pemain ' + (side === 'a' ? 'biru' : 'merah') + ' ' + (i + 1) + '"><option value="">Pilih pemain…</option>' + opts + '</select>';
     }).join('') + '</div>';
   }
+  function holders(e, c){ var x = ((e.lap || {})[c.id] || {}).pegang || {}; return Object.keys(x).map(function(u){ return {uid:u, name:x[u]}; }); }
   function courtCard(e, c){
-    var A = store.isAdmin && e.status === 'aktif';
+    var mine = myCourts(e), A = canScore() && e.status === 'aktif' && (!mine.length || mine.indexOf(c.id) > -1);
+    var hs = holders(e, c), hold = (!VIEW && hs.length) ? '<p class="hint" style="margin:0 0 6px">Dipegang: ' + hs.map(function(h){ return esc(h.name) + (h.uid === store.uid ? ' (perangkat ini)' : ''); }).join(', ') + (hs.length > 1 ? ' <b class="l">Lebih dari satu perangkat memegang lapangan ini.</b>' : '') + '</p>' : '';
     if (c.match){
       var m = c.match, pa = Math.round(expA(m.a, m.b) * 100), g = play(e.rules, m.pts);
-      var h = '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag live">Berjalan ' + mins(m.start) + ' mnt</span></div>' +
+      var h = '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag live">Berjalan ' + mins(m.start) + ' mnt</span></div>' + hold +
         liveRow('a', m.a) + liveRow('b', m.b) +
         '<div class="vs"><span>Peluang biru ' + pa + '%</span><span class="bar"><i style="width:' + pa + '%"></i></span><span>merah ' + (100 - pa) + '%</span></div>';
       if (A) h += '<div class="livebtns"><button class="ptbtn a" data-point="' + c.id + ':0" ' + (g.done ? 'disabled' : '') + ' aria-label="Poin untuk biru"><span>+1 Biru</span><b>' + (g.labels[0] || '–') + '</b></button>' +
@@ -282,15 +331,22 @@
     if (c.draft && A){
       var full = c.draft.a.concat(c.draft.b).every(Boolean);
       var diff = full ? Math.round(Math.abs(avg(c.draft.a) - avg(c.draft.b))) : 0;
-      return '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag prop">Disusun panitia</span></div>' + slotRow(e, c, 'a') + slotRow(e, c, 'b') +
+      return '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag prop">Sedang disusun</span></div>' + hold + slotRow(e, c, 'a') + slotRow(e, c, 'b') +
         '<p class="hint">' + (full ? 'Selisih rating ' + diff + '. Hanya acuan, keputusan di panitia.' : 'Pilih pemain dari daftar antrean di setiap kolom. Yang paling sedikit main dan paling lama menunggu ada di atas.') + '</p>' +
         '<div class="btns"><button class="btn primary" data-start="' + c.id + '" ' + (full ? '' : 'disabled') + '>Mulai main</button><button class="btn" data-swapsides="' + c.id + '">Tukar sisi</button><button class="btn" data-cancel="' + c.id + '">Batal</button></div></div>';
     }
-    return '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag">' + (c.draft ? 'Sedang disusun' : 'Kosong') + '</span></div>' +
-      (A ? '<div class="btns" style="margin-top:0"><button class="btn primary" data-compose="' + c.id + '">Susun pertandingan</button></div>' : '<p class="muted" style="margin:0">' + (e.status === 'aktif' ? 'Menunggu panitia menyusun pertandingan.' : 'Mabar sudah selesai.') + '</p>') + '</div>';
+    return '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag">' + (c.draft ? 'Sedang disusun' : 'Kosong') + '</span></div>' + hold +
+      (A ? '<div class="btns" style="margin-top:0"><button class="btn primary" data-compose="' + c.id + '">Susun pertandingan</button></div>' : '<p class="muted" style="margin:0">' + (e.status === 'aktif' ? (canScore() && e.status === 'aktif' ? 'Bukan lapangan Anda. Pilih di “Lapangan saya” untuk mengelolanya.' : 'Menunggu panitia menyusun pertandingan.') : 'Mabar sudah selesai.') + '</p>') + '</div>';
+  }
+  function orderedCourts(e){ var mine = myCourts(e), cs = courtsOf(e); if (!mine.length) return cs; return cs.filter(function(c){ return mine.indexOf(c.id) > -1; }).concat(cs.filter(function(c){ return mine.indexOf(c.id) < 0; })); }
+  function mineBar(e){
+    if (!canScore() || e.status !== 'aktif') return '';
+    var mine = myCourts(e);
+    return '<div class="panel glass minebar"><b>Lapangan saya</b>' + courtsOf(e).map(function(c){ var on = mine.indexOf(c.id) > -1; return '<button class="chip ' + (on ? 'sel' : '') + '" data-mine="' + c.id + '" aria-pressed="' + on + '">' + (on ? '✓ ' : '') + 'Lap. ' + c.id + '</button>'; }).join('') +
+      '<span class="hint" style="margin:0">' + (mine.length ? 'Tombol skor hanya aktif di lapangan yang Anda pilih.' : 'Belum dipilih: semua lapangan bisa Anda kelola.') + '</span></div>';
   }
   function viewSkor(e){
-    var A = store.isAdmin && e.status === 'aktif', qu = queue(e), busy = onCourt(e), pres = Object.keys(e.present);
+    var qu = queue(e), busy = onCourt(e), pres = Object.keys(e.present);
     var never = pres.filter(function(id){ return games(e, id) === 0 && !busy[id]; }).length;
     var qHtml = qu.length ? qu.map(function(id, i){
       var g = games(e, id);
@@ -301,7 +357,8 @@
       '<div class="stat glass"><b>' + evMatches(e.id).length + '</b><span>pertandingan selesai</span></div>' +
       '<div class="stat glass"><b>' + courtsOf(e).filter(function(c){ return c.match; }).length + '/' + courtsOf(e).length + '</b><span>lapangan terpakai</span></div>' +
       '<div class="stat glass"><b>' + never + '</b><span>belum main</span></div></div>' +
-      '<div class="cols"><div class="courts">' + courtsOf(e).map(function(c){ return courtCard(e, c); }).join('') + '</div>' +
+      mineBar(e) +
+      '<div class="cols"><div class="courts">' + orderedCourts(e).map(function(c){ return courtCard(e, c); }).join('') + '</div>' +
       '<div class="panel glass"><h3>Antrean</h3><p class="hint" style="margin:-4px 0 8px">Urutan: jumlah main paling sedikit, lalu menunggu paling lama.</p><ul class="q">' + qHtml + '</ul>' +
       '<div class="btns"><button class="btn" data-evshare="' + e.id + '">QR mabar ini</button></div></div></div>';
   }
@@ -375,6 +432,7 @@
   }
   function qrDialog(title, url){
     $('dlgBody').innerHTML = '<div class="center"><h2>' + esc(title) + '</h2><p class="muted">Pindai untuk melihat skor langsung. Tidak perlu instal aplikasi.</p><div class="qrbox big">' + qrSvg(url) + '</div><p class="url">' + esc(url) + '</p>' +
+      (store.mode === 'local' ? '<p class="err">Mode lokal aktif: QR ini belum bisa dibuka dari HP lain. Aktifkan mode online (README langkah 2 sampai 4).</p>' : '') +
       '<div class="btns" style="justify-content:center"><button class="btn" data-copylink="' + esc(url) + '">Salin tautan</button><button class="btn" data-share-link="' + esc(url) + '">Bagikan</button><button class="btn" data-close>Tutup</button></div></div>';
     $('dlg').classList.add('wide'); $('dlg').showModal();
   }
@@ -481,10 +539,13 @@
   function render(){
     ui.pendingRender = false;
     renderTop();
+    if (PICK){ $('subnav').innerHTML = ''; $('app').innerHTML = viewLanding(); return; }
+    if (VIEW && !KID){ $('subnav').innerHTML = ''; $('app').innerHTML = '<div class="panel glass empty-state center"><h2>Pindai QR dari panitia</h2><p class="muted">Tautan ini belum menyebutkan komunitas. Buka tautan atau QR yang dibagikan panitia.</p></div>'; return; }
     if (!store.ready){ $('subnav').innerHTML = ''; $('app').innerHTML = '<p class="muted">Memuat…</p>'; return; }
     if (store.error && store.error !== ui.lastErr){ ui.lastErr = store.error; toast(store.error); }
     if (!st().settings){ $('subnav').innerHTML = ''; $('app').innerHTML = viewSetup(); return; }
-    if (!VIEW && !store.isAdmin){ $('subnav').innerHTML = ''; $('app').innerHTML = store.uid ? viewClaim() : viewSetup(); return; }
+    if (!VIEW && !store.role){ $('subnav').innerHTML = ''; $('app').innerHTML = store.uid ? viewClaim() : viewSetup(); return; }
+    rememberCommunity();
     if (ui.view === 'event' && !getEv(ui.ev)) ui.view = 'list';
     renderNav();
     var html;
@@ -557,10 +618,17 @@
       (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function(){ toast('Tersalin.'); }).catch(function(){ prompt('Salin teks ini:', txt); });
       return;
     }
+    if (t.hasAttribute('data-pilih')){ location.href = appUrl('pilih=1'); return; }
+    if (d.gokid){ lsSet('skor-mabar:kid-terakhir', d.gokid); location.href = appUrl('k=' + encodeURIComponent(d.gokid)); return; }
+    if (t.hasAttribute('data-newkom')){ var kn = $('newKomName').value.trim(); if (!kn){ $('newKomName').focus(); return; }
+      location.href = appUrl('k=' + slug(kn) + '-' + randCode(4).toLowerCase() + '&n=' + encodeURIComponent(kn)); return; }
+    if (t.hasAttribute('data-joinkom')){ var jk = validKid($('joinKid').value.trim().toLowerCase()), jc = normCode($('joinCode').value);
+      if (!jk){ toast('Kode komunitas tidak valid.'); $('joinKid').focus(); return; }
+      location.href = appUrl('k=' + jk + (jc ? '&undangan=' + jc : '')); return; }
     if (t.hasAttribute('data-claim')){
       var code = normCode($('claimCode').value), errc = $('claimErr'); if (!code){ $('claimCode').focus(); return; }
       t.disabled = true; errc.hidden = true;
-      store.claim(code, $('devName').value.trim()).then(function(){ toast('Perangkat terdaftar sebagai panitia.'); render(); })
+      store.claim(code, $('devName').value.trim()).then(function(r){ toast('Perangkat terdaftar sebagai ' + r + '.'); try { history.replaceState(null, '', '?k=' + KID); } catch(err){} render(); })
         .catch(function(){ errc.textContent = 'Kode tidak berlaku. Periksa kembali, atau minta kode undangan baru.'; errc.hidden = false; t.disabled = false; });
       return;
     }
@@ -568,22 +636,45 @@
       var paths = {settings:readCommunity()}, dev = ($('devName') && $('devName').value.trim()) || 'Perangkat pendiri';
       if (store.mode === 'cloud'){ paths['owners/' + store.uid] = 'pendiri'; paths['ownerNames/' + store.uid] = {name:dev, at:Date.now()}; }
       t.disabled = true;
-      store.update(paths).then(function(){ ui.view = 'list'; ui.listTab = 'daftar'; render(); toast('Komunitas siap.'); if (store.mode === 'cloud') makeRecovery(); })
+      store.update(paths).then(function(){ ui.view = 'list'; ui.listTab = 'daftar'; try { history.replaceState(null, '', '?k=' + KID); } catch(err){} render(); toast('Komunitas siap.'); if (store.mode === 'cloud') makeRecovery(); })
         .catch(function(){ t.disabled = false; toast('Gagal menyimpan. Mungkin komunitas ini sudah disiapkan perangkat lain.'); });
       return;
     }
 
+    // ===== Panitia dan wasit: lapangan =====
+    if (e && e.status === 'aktif' && canScore()){
+      if (d.mine){ var cid = +d.mine, mine = myCourts(e), on = mine.indexOf(cid) < 0;
+        mine = on ? mine.concat([cid]).sort() : mine.filter(function(x){ return x !== cid; });
+        lsSet(mineKey(e), JSON.stringify(mine));
+        if (store.mode === 'cloud'){ var mu = {}; mu[evPath(e, 'lap/' + cid + '/pegang/' + store.uid)] = on ? deviceName(store.uid) : null; store.update(mu); }
+        return render(); }
+      if (d.compose){ var k = slotsN(e), blank = []; for (var i = 0; i < k; i++) blank.push(0); store.update({[evPath(e, 'lap/' + d.compose + '/draft')]:{a:blank, b:blank.slice()}}); return render(); }
+      if (d.swapsides){ var c3 = courtOf(e, d.swapsides); store.update({[evPath(e, 'lap/' + c3.id + '/draft')]:{a:c3.draft.b, b:c3.draft.a}}); return render(); }
+      if (d.cancel){ store.update({[evPath(e, 'lap/' + d.cancel + '/draft')]:null}); return render(); }
+      if (d.start){ var c4 = courtOf(e, d.start); var su = {}; su[evPath(e, 'lap/' + c4.id + '/match')] = {a:c4.draft.a, b:c4.draft.b, pts:[], start:Date.now()}; su[evPath(e, 'lap/' + c4.id + '/draft')] = null; store.update(su); toast('Lapangan ' + c4.id + ' dimulai.'); return render(); }
+      if (d.point){ var pp = d.point.split(':'), c5 = courtOf(e, pp[0]); if (!c5 || !c5.match || play(e.rules, c5.match.pts).done) return;
+        if (navigator.vibrate) navigator.vibrate(20);
+        store.update({[evPath(e, 'lap/' + c5.id + '/match/pts')]:c5.match.pts.concat([+pp[1]])}); return render(); }
+      if (d.undo){ var c6 = courtOf(e, d.undo); store.update({[evPath(e, 'lap/' + c6.id + '/match/pts')]:c6.match.pts.slice(0, -1)}); return render(); }
+      if (d.finish){ var c7 = courtOf(e, d.finish), g = play(e.rules, c7.match.pts);
+        if (!g.done && g.lead == null){ toast('Skor masih imbang. Tambah poin dulu atau batalkan.'); return; }
+        if (!g.done && !confirm('Pertandingan belum selesai menurut aturan. Simpan dengan ' + (g.lead === 0 ? 'biru' : 'merah') + ' sebagai pemenang (' + g.text + ')?')) return;
+        var res = saveMatch(e, c7, g); toast('Hasil tersimpan. Rating tim ' + (res.w === 0 ? 'biru' : 'merah') + ' +' + Math.abs(res.d) + '.'); return render(); }
+      if (d.abort){ if (!confirm('Batalkan pertandingan di Lapangan ' + d.abort + '? Skor tidak disimpan.')) return; store.update({[evPath(e, 'lap/' + d.abort + '/match')]:null}); return render(); }
+    }
+
     if (!A) return;
     // ===== Panitia =====
-    if (t.hasAttribute('data-invite')){
-      var ic = randCode(6);
-      store.setSecret('undangan/' + ic, {exp:Date.now() + 15 * MIN, dibuat:Date.now()}).then(function(){ showCode('Kode undangan panitia', ic, 'Di HP panitia baru, buka aplikasi panitia lalu masukkan kode ini. Berlaku 15 menit dan sekali pakai.'); }).catch(function(){ toast('Gagal membuat kode.'); });
+    if (d.invite){
+      var ic = randCode(6), peran = d.invite === 'wasit' ? 'wasit' : 'panitia';
+      if (store.mode === 'local'){ toast('Undangan hanya bisa dipakai di mode online.'); return; }
+      store.setSecret('undangan/' + ic, {exp:Date.now() + 15 * MIN, peran:peran, dibuat:Date.now()}).then(function(){ showInvite(ic, peran); }).catch(function(){ toast('Gagal membuat kode.'); });
       return;
     }
     if (t.hasAttribute('data-newrecovery')) return makeRecovery();
-    if (d.revoke){ if (!confirm('Cabut akses panitia dari perangkat ini?')) return; var rv = {}; rv['owners/' + d.revoke] = null; rv['ownerNames/' + d.revoke] = null; store.update(rv); return render(); }
+    if (d.revoke){ var rk = d.revoke.split(':'), isW = rk[0] === 'wasit'; if (!confirm('Cabut akses ' + rk[0] + ' dari perangkat ini?')) return; var rv = {}; rv[(isW ? 'wasit/' : 'owners/') + rk[1]] = null; rv[(isW ? 'wasitNames/' : 'ownerNames/') + rk[1]] = null; store.update(rv); return render(); }
     if (t.hasAttribute('data-savesettings')){ store.update({settings:readCommunity()}); toast('Tersimpan.'); return render(); }
-    if (t.hasAttribute('data-export')){ var ex = JSON.parse(JSON.stringify(st())); delete ex.owners; delete ex.ownerNames; download('skor-mabar-cadangan-' + todayStr() + '.json', JSON.stringify(ex, null, 2)); return; }
+    if (t.hasAttribute('data-export')){ var ex = JSON.parse(JSON.stringify(st())); delete ex.owners; delete ex.ownerNames; delete ex.wasit; delete ex.wasitNames; download('skor-mabar-cadangan-' + todayStr() + '.json', JSON.stringify(ex, null, 2)); return; }
     if (t.hasAttribute('data-wipe')){ if (prompt('Ketik HAPUS untuk menghapus semua pemain, mabar, dan turnamen. Pengaturan dan perangkat panitia tetap.') !== 'HAPUS') return; store.update({members:null, matches:null, events:null, tournaments:null}); ui.view = 'list'; toast('Data dihapus.'); return render(); }
     if (t.hasAttribute('data-addplayer')) return addPlayer(e && e.status === 'aktif' ? e : null);
     if (d.delmember){ if (!confirm('Hapus ' + nm(d.delmember) + '?')) return; store.update({['members/' + d.delmember]:null}); return render(); }
@@ -596,7 +687,7 @@
       var rules = f.type === 'rally' ? {type:'rally', target:Math.max(5, +f.target || 21), cap:Math.max(0, +f.cap || 0)} : {type:'tennis', sets:+f.sets === 3 ? 3 : 1, games:+f.games || 6, golden:!!f.golden, tb:!!f.tb};
       var id = uid('e'), prev = events()[0], present = {};
       if (f.copyPresent && prev) Object.keys(prev.present).forEach(function(k){ present[k] = Date.now(); });
-      store.update({['events/' + id]:{type:'mabar', name:f.name.trim(), date:f.date || todayStr(), sport:f.sport, jenis:f.jenis, rules:rules, courts:Math.min(12, Math.max(1, +f.courts || 1)), status:'aktif', created:Date.now(), present:present}});
+      store.update({['events/' + id]:{type:'mabar', name:f.name.trim(), lokasi:(f.lokasi || '').trim(), date:f.date || todayStr(), sport:f.sport, jenis:f.jenis, rules:rules, courts:Math.min(12, Math.max(1, +f.courts || 1)), status:'aktif', created:Date.now(), present:present}});
       mf = null; toast('Mabar dibuat. Tandai pemain yang hadir.');
       return openEvent(id, 'hadir');
     }
@@ -608,19 +699,6 @@
 
     // Dalam mabar
     if (e && e.status === 'aktif'){
-      if (d.compose){ var k = slotsN(e), blank = []; for (var i = 0; i < k; i++) blank.push(0); store.update({[evPath(e, 'lap/' + d.compose + '/draft')]:{a:blank, b:blank.slice()}}); return render(); }
-      if (d.swapsides){ var c3 = courtOf(e, d.swapsides); store.update({[evPath(e, 'lap/' + c3.id + '/draft')]:{a:c3.draft.b, b:c3.draft.a}}); return render(); }
-      if (d.cancel){ store.update({[evPath(e, 'lap/' + d.cancel + '/draft')]:null}); return render(); }
-      if (d.start){ var c4 = courtOf(e, d.start); store.update({[evPath(e, 'lap/' + c4.id)]:{match:{a:c4.draft.a, b:c4.draft.b, pts:[], start:Date.now()}}}); toast('Lapangan ' + c4.id + ' dimulai.'); return render(); }
-      if (d.point){ var pp = d.point.split(':'), c5 = courtOf(e, pp[0]); if (!c5 || !c5.match || play(e.rules, c5.match.pts).done) return;
-        if (navigator.vibrate) navigator.vibrate(20);
-        store.update({[evPath(e, 'lap/' + c5.id + '/match/pts')]:c5.match.pts.concat([+pp[1]])}); return render(); }
-      if (d.undo){ var c6 = courtOf(e, d.undo); store.update({[evPath(e, 'lap/' + c6.id + '/match/pts')]:c6.match.pts.slice(0, -1)}); return render(); }
-      if (d.finish){ var c7 = courtOf(e, d.finish), g = play(e.rules, c7.match.pts);
-        if (!g.done && g.lead == null){ toast('Skor masih imbang. Tambah poin dulu atau batalkan.'); return; }
-        if (!g.done && !confirm('Pertandingan belum selesai menurut aturan. Simpan dengan ' + (g.lead === 0 ? 'biru' : 'merah') + ' sebagai pemenang (' + g.text + ')?')) return;
-        var res = saveMatch(e, c7, g); toast('Hasil tersimpan. Rating tim ' + (res.w === 0 ? 'biru' : 'merah') + ' +' + Math.abs(res.d) + '.'); return render(); }
-      if (d.abort){ if (!confirm('Batalkan pertandingan di Lapangan ' + d.abort + '? Skor tidak disimpan.')) return; store.update({[evPath(e, 'lap/' + d.abort + '/match')]:null}); return render(); }
       if (d.present){ var pid = d.present, on = !e.present[pid];
         if (!on && onCourt(e)[pid]){ toast('Pemain sedang bermain.'); return; }
         var pu = {}; pu[evPath(e, 'present/' + pid)] = on ? Date.now() : null;
@@ -655,7 +733,7 @@
         store.update({settings:o.settings, members:o.members || null, matches:o.matches || null, events:o.events || null, tournaments:o.tournaments || null}); toast('Data dipulihkan.'); render(); } catch(err){ toast('File cadangan tidak valid.'); } };
       r.readAsText(x.files[0]); return;
     }
-    if (x.dataset && x.dataset.slotsel && store.isAdmin){
+    if (x.dataset && x.dataset.slotsel && canScore()){
       var e = ui.view === 'event' ? getEv(ui.ev) : null; if (!e || e.status !== 'aktif') return;
       var sp = x.dataset.slotsel.split(':'), c = courtOf(e, sp[0]); if (!c || !c.draft) return;
       c.draft[sp[1]][+sp[2]] = x.value || 0;
