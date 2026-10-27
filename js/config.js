@@ -11,7 +11,13 @@
 */
 window.APP_CONFIG = {
   KOMUNITAS_ID: 'GASTON',
-  FIREBASE_CONFIG: null
+   FIREBASE_CONFIG: {
+    apiKey: "AIzaSyBQNtXwsL2MUmz_LIcJyxwv2oIkX4V5Is4",
+    authDomain: "skor-mabar-umy.firebaseapp.com",
+    databaseURL: "https://skor-mabar-umy-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "skor-mabar-umy",
+    appId: "1:1234567890:web:abcdef"
+  }
 
   /* Contoh setelah diisi:
   FIREBASE_CONFIG: {
