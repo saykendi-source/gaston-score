@@ -144,7 +144,7 @@ Alamatnya seperti `https://namaanda.github.io/skor-mabar/`.
 
 1. Di HP atau tablet panitia, buka alamat aplikasi (misalnya `https://skor-mabar.web.app`). Muncul layar **Komunitas**.
 2. Di **Buat komunitas baru**, isi nama komunitas (misalnya `PB Sadewa`) lalu tekan **Buat**. Aplikasi membuat kode komunitas unik, misalnya `pb-sadewa-k7m2`.
-3. Isi form **Siapkan komunitas**: nama, tempat, dan nama perangkat ini.
+3. Isi form **Siapkan komunitas**: nama komunitas dan nama perangkat ini. Tempat (GOR) tidak diisi di sini, melainkan di setiap mabar, karena satu komunitas bisa berpindah-pindah GOR.
 4. Tekan **Simpan dan mulai**. Muncul **kode pemulihan**: catat dan simpan di tempat aman. Kode ini dipakai jika semua perangkat panitia hilang atau datanya terhapus.
 
 Selanjutnya aplikasi panitia selalu membuka komunitas terakhir. Tombol **Komunitas** di bagian atas dipakai untuk berpindah komunitas, membuat komunitas lain, atau bergabung ke komunitas lain.
@@ -187,6 +187,16 @@ Di tab **Lapangan**, setiap panitia dan wasit bisa memilih lapangan yang dipegan
 - Setiap lapangan diberi label **Dipegang: HP Wasit 2**. Jika ada dua perangkat memegang lapangan yang sama, muncul peringatan, karena dua orang yang mencatat skor di lapangan yang sama bisa membuat ketukan hilang.
 - Pilihan ini tersimpan di HP masing-masing dan bisa diubah kapan saja. Jika tidak ada yang dipilih, semua lapangan bisa dikelola.
 
+### Wasit berganti di lapangan yang sama
+
+Misalnya di Lapangan 1, pertandingan pertama diwasiti A dan pertandingan kedua diwasiti C:
+
+- **Cara wasit sendiri:** setelah **Simpan hasil**, wasit A melepas *Lap. 1* di baris **Lapangan saya**, lalu wasit C memilih *Lap. 1* di HP-nya.
+- **Cara panitia:** di kartu Lapangan 1, panitia menekan **Lepas** di samping nama HP A, lalu memilih HP C di **+ Tunjuk wasit…**. Perubahan ini langsung berlaku di HP A dan HP C, tanpa mereka perlu melakukan apa pun. Cara ini juga berguna jika wasit lupa melepas lapangan atau sudah pulang.
+- **Cara perangkat tetap:** satu tablet ditaruh di setiap lapangan dan diserahkan dari wasit ke wasit. Tidak ada yang perlu diubah di aplikasi.
+
+Nama perangkat yang menyimpan hasil tercatat sebagai **wasit** di setiap pertandingan. Nama ini tampil di kartu lapangan saat pertandingan berjalan ("Wasit: HP Wasit C"), di daftar **Hasil pertandingan** di bawah klasemen, dan di profil pemain. Karena itu, beri nama perangkat yang jelas saat mendaftar, misalnya `HP Wasit Budi`.
+
 Skor di setiap lapangan disimpan terpisah, jadi wasit Lapangan 1 dan Lapangan 2 bisa mencatat bersamaan dan semua penonton melihat keduanya bergerak langsung.
 
 ### Berpindah antara Mabar dan Turnamen
@@ -198,7 +208,7 @@ Di bagian atas aplikasi selalu ada tombol **Mabar** dan **Turnamen**. Ketuk untu
 Setiap sesi main dibuat sebagai satu **mabar** tersendiri, dengan klasemennya sendiri.
 
 1. Mode **Mabar** → tab **Daftar mabar** → **+ Mabar baru**.
-2. Isi nama, lokasi (misalnya `GOR Sadewa`), tanggal, cabang, jenis (ganda atau tunggal), jumlah lapangan, dan aturan skor. Aturan otomatis terisi sesuai cabang:
+2. Isi nama, lokasi GOR (misalnya `GOR Sadewa`; terisi otomatis dari mabar sebelumnya dan bisa diganti), tanggal, cabang, jenis (ganda atau tunggal), jumlah lapangan, dan aturan skor. Aturan otomatis terisi sesuai cabang:
 
    | Cabang | Aturan bawaan | Bisa diubah |
    |---|---|---|
@@ -271,6 +281,25 @@ Penonton tidak perlu instal apa pun. Tampilan penonton berisi daftar mabar, skor
 
 ---
 
+## Menghapus komunitas
+
+Panitia bisa menghapus komunitas yang dibuatnya sendiri:
+
+1. **Pengaturan → Unduh cadangan** dulu jika datanya masih ingin disimpan.
+2. **Pengaturan → Hapus komunitas ini**, lalu ketik kode komunitas (misalnya `pb-sadewa-k7m2`) sebagai konfirmasi.
+
+Akibatnya:
+
+- Semua data komunitas itu terhapus permanen: pemain, mabar, hasil, turnamen, perangkat panitia dan wasit, serta kode undangan.
+- Tautan dan QR penonton menampilkan **Komunitas ini sudah dihapus**.
+- HP panitia dan wasit lain juga melihat pesan yang sama, dan komunitas itu hilang dari daftar **Komunitas** di HP masing-masing.
+- Kode komunitas itu tidak bisa dipakai ulang. Untuk mulai lagi, buat komunitas baru dengan kode baru.
+- Komunitas lain tidak terpengaruh sama sekali.
+
+Hanya perangkat **panitia** komunitas itu yang bisa menghapusnya. Wasit dan komunitas lain tidak bisa.
+
+---
+
 ## Cadangan data
 
 Tab **Pengaturan → Unduh cadangan (JSON)** menyimpan seluruh data komunitas. Lakukan berkala, terutama di mode lokal. Untuk memulihkan, pakai **Pulihkan dari cadangan**.
@@ -311,13 +340,14 @@ Tab **Pengaturan → Unduh cadangan (JSON)** menyimpan seluruh data komunitas. L
 
 ```
 komunitas/{kodeKomunitas}/
-  settings      {name, place}
+  settings      {name}
   members/{id}  {name, rating, hist:[{t,r}], guest, joined}
   events/{id}   {type:"mabar", name, lokasi, date, sport, jenis, courts, status:"aktif"|"selesai", created,
                  rules:{type:"rally", target, cap} | {type:"tennis", sets, games, golden, tb},
                  present:{memberId: waktuHadir},
-                 lap/{n}: {draft:{a:[...], b:[...]}, match:{a, b, pts:[0|1,...], start}, pegang:{uid: namaPerangkat}}}
-  matches/{id}  {ev, a:[id..], b:[id..], sa, sb, w:0|1, skor:"6–4", t, start, court, delta}
+                 lap/{n}: {draft:{a:[...], b:[...]}, match:{a, b, pts:[0|1,...], start, by:{uid,name}}, pegang:{uid: namaPerangkat}}}
+  matches/{id}  {ev, a:[id..], b:[id..], sa, sb, w:0|1, skor:"6–4", t, start, court, delta, wasit, wasitUid, mulaiOleh}
+  dihapus       waktu penghapusan (jika komunitas sudah dihapus, hanya kunci ini yang tersisa)
   tournaments/{id} {name, sport, fmt, jenis, status, created, linked, affect, entries:[[{id,name}]]}
   owners/{uid}  kode yang dipakai mendaftar sebagai panitia ("pendiri" untuk perangkat pertama)
   ownerNames/{uid} {name, at}
@@ -334,6 +364,8 @@ Rating memakai Elo dengan K = 24. Rating tim adalah rata-rata rating kedua pemai
 ---
 
 ## Catatan pembaruan
+
+**v7:** panitia bisa melepas dan menunjuk wasit di setiap lapangan; nama wasit tercatat di setiap hasil pertandingan dan tampil di daftar **Hasil pertandingan**; isian tempat dipindah dari data komunitas ke setiap mabar; panitia bisa menghapus komunitasnya sendiri. Aturan database tidak berubah dari v6.
 
 **v6:** banyak komunitas dalam satu aplikasi (layar **Komunitas**, kode komunitas di alamat), peran **wasit** terbatas, **Lapangan saya** dengan label perangkat pemegang, dan kolom **lokasi** di setiap mabar. **Aturan database berubah, jadi wajib dipasang ulang** (`firebase deploy` atau salin `database.rules.json` ke tab Rules). Jika Anda sudah memakai versi lama dengan `KOMUNITAS_ID` tertentu, data lama tetap ada: buka `index.html?k=kodelama` sekali di HP panitia, atau isi kode itu di `KOMUNITAS_ID`.
 

@@ -1,6 +1,6 @@
 /* Service worker: menyimpan file aplikasi agar cepat dibuka dan tetap tampil saat sinyal lemah.
    Naikkan VERSION setiap kali Anda mengubah file aplikasi. */
-const VERSION = 'skor-mabar-v6';
+const VERSION = 'skor-mabar-v7';
 const SHELL = ['./', './index.html', './css/style.css', './js/config.js', './js/store.js', './js/app.js', './js/qrcode.js', './lihat.html',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 

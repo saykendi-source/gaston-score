@@ -1,4 +1,4 @@
-/* Skor Mabar v6: aplikasi utama (mabar per acara, turnamen, skor rally dan tenis) */
+/* Skor Mabar v7: aplikasi utama (mabar per acara, turnamen, skor rally dan tenis) */
 (function(){
   'use strict';
   var VIEW = !!window.VIEW_ONLY;
@@ -15,6 +15,11 @@
     var list = myCommunities().filter(function(x){ return x.kid !== KID; });
     list.unshift({kid:KID, name:(store.state.settings || {}).name || KID, role:store.role});
     lsSet('skor-mabar:daftar-komunitas', JSON.stringify(list.slice(0, 20))); lsSet('skor-mabar:kid-terakhir', KID);
+  }
+  function forgetCommunity(k){
+    if (VIEW) return;
+    lsSet('skor-mabar:daftar-komunitas', JSON.stringify(myCommunities().filter(function(x){ return x.kid !== k; })));
+    if (lsGet('skor-mabar:kid-terakhir') === k){ try { localStorage.removeItem('skor-mabar:kid-terakhir'); } catch(e){} }
   }
   function appBase(){ return location.href.split('#')[0].split('?')[0]; }
   function appUrl(q){ return new URL('index.html', appBase()).href + (q ? '?' + q : ''); }
@@ -87,9 +92,17 @@
   function st(){ return store.state; }
   function cfg(){ return st().settings || {}; }
   function canScore(){ return store.role === 'panitia' || store.role === 'wasit'; }
-  function deviceName(u){ var a = (st().ownerNames || {})[u] || (st().wasitNames || {})[u]; return a ? a.name : 'Perangkat'; }
+  function deviceName(u){ if (u === 'lokal') return 'Panitia'; var a = (st().ownerNames || {})[u] || (st().wasitNames || {})[u]; return a ? a.name : 'Perangkat'; }
   function mineKey(e){ return 'skor-mabar:lapsaya:' + KID + ':' + e.id; }
-  function myCourts(e){ try { return JSON.parse(lsGet(mineKey(e))) || []; } catch(err){ return []; } }
+  function myCourts(e){
+    if (store.mode === 'cloud'){ var lap = e.lap || {}, u = store.uid; return Object.keys(lap).filter(function(k){ return lap[k] && lap[k].pegang && u && lap[k].pegang[u]; }).map(Number).sort(); }
+    try { return JSON.parse(lsGet(mineKey(e))) || []; } catch(err){ return []; }
+  }
+  function devices(){
+    var out = [], add = function(map, names, peran){ Object.keys(map || {}).forEach(function(u){ out.push({uid:u, name:(names && names[u] ? names[u].name : 'Perangkat ' + peran), peran:peran}); }); };
+    add(st().wasit, st().wasitNames, 'wasit'); add(st().owners, st().ownerNames, 'panitia');
+    return out;
+  }
   function arr(x){ return Array.isArray(x) ? x : (x ? Object.keys(x).map(function(k){ return x[k]; }) : []); }
   function members(){ var m = st().members || {}; return Object.keys(m).map(function(id){ return Object.assign({rating:1500}, m[id], {id:id}); }); }
   function byId(id){ var m = (st().members || {})[id]; return m ? Object.assign({rating:1500, hist:[]}, m, {id:id}) : {id:id, name:'(terhapus)', rating:1500, hist:[]}; }
@@ -120,7 +133,7 @@
     for (var i = 1; i <= n; i++){
       var x = c[i] || {};
       out.push({id:i,
-        match: x.match ? {a:arr(x.match.a), b:arr(x.match.b), pts:arr(x.match.pts), start:x.match.start || Date.now()} : null,
+        match: x.match ? {a:arr(x.match.a), b:arr(x.match.b), pts:arr(x.match.pts), start:x.match.start || Date.now(), by:x.match.by || null} : null,
         draft: x.draft ? {a:fillSlots(x.draft.a, k), b:fillSlots(x.draft.b, k)} : null});
     }
     return out;
@@ -145,6 +158,7 @@
   function toast(msg){ var el = $('toast'); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function(){ el.hidden = true; }, 2800); }
 
   // ---------- Header & navigasi ----------
+  function brandSub(){ var e = ui.view === 'event' && getEv(ui.ev); return e && e.lokasi ? '📍 ' + e.lokasi : 'Skor langsung komunitas'; }
   function renderTop(){
     var c = cfg(), A = store.isAdmin;
     var status = store.mode === 'local' ? '<span class="statusdot local">Mode lokal</span>' : (store.online ? '<span class="statusdot">Online</span>' : '<span class="statusdot off">Offline</span>');
@@ -152,7 +166,7 @@
     if (!VIEW && !PICK) role += '<button class="btn" data-pilih>Komunitas</button>';
     var theme = (function(){ try { return localStorage.getItem('skor-tema') || 'auto'; } catch(e){ return 'auto'; } })();
     $('top').innerHTML =
-      '<div class="brand"><b>' + esc(c.name || 'Skor Mabar') + '</b><span>' + esc(c.place || 'Skor langsung komunitas') + '</span></div>' +
+      '<div class="brand"><b>' + esc(c.name || 'Skor Mabar') + '</b><span>' + esc(brandSub()) + '</span></div>' +
       '<div class="seg" role="group" aria-label="Mode"><button data-mode="mabar" aria-pressed="' + (ui.mode === 'mabar') + '">Mabar</button><button data-mode="turnamen" aria-pressed="' + (ui.mode === 'turnamen') + '">Turnamen</button></div>' +
       '<div class="seg theme" role="group" aria-label="Tema"><button data-theme-set="auto" aria-pressed="' + (theme === 'auto') + '" aria-label="Tema otomatis">Auto</button><button data-theme-set="light" aria-pressed="' + (theme === 'light') + '" aria-label="Tema terang">☀︎</button><button data-theme-set="dark" aria-pressed="' + (theme === 'dark') + '" aria-label="Tema gelap">☾</button></div>' +
       status + role;
@@ -201,10 +215,9 @@
   }
   function communityForm(c){
     return '<div class="formgrid">' +
-      '<label class="field"><span>Nama komunitas</span><input id="sName" value="' + esc(c.name || '') + '" placeholder="Mabar Selasa Malam" maxlength="40"></label>' +
-      '<label class="field"><span>Tempat</span><input id="sPlace" value="' + esc(c.place || '') + '" placeholder="GOR Kampus" maxlength="40"></label></div>';
+      '<label class="field"><span>Nama komunitas</span><input id="sName" value="' + esc(c.name || '') + '" placeholder="PB Sadewa" maxlength="40"></label></div>';
   }
-  function readCommunity(){ return {name: $('sName').value.trim() || 'Komunitas Raket', place: $('sPlace').value.trim()}; }
+  function readCommunity(){ return {name: $('sName').value.trim() || 'Komunitas Raket'}; }
   function viewClaim(){
     return '<div class="panel glass empty-state"><h2>Daftarkan perangkat ini</h2><p class="muted">Perangkat ini belum terdaftar di komunitas <b>' + esc(cfg().name || KID) + '</b>. Masukkan kode undangan panitia atau wasit, atau kode pemulihan.</p>' +
       '<div class="formgrid" style="grid-template-columns:1fr"><label class="field"><span>Kode komunitas</span><input value="' + esc(KID) + '" disabled></label>' +
@@ -265,7 +278,7 @@
   function newMf(){
     var d = new Date(), last = events()[0];
     var sport = last ? last.sport : 'Badminton';
-    var f = {name:'Mabar ' + HARI[d.getDay()] + ' ' + d.getDate() + ' ' + BULAN[d.getMonth()], date:todayStr(), sport:sport, courts: last ? last.courts : 3, lokasi: (last && last.lokasi) || cfg().place || '', copyPresent:false};
+    var f = {name:'Mabar ' + HARI[d.getDay()] + ' ' + d.getDate() + ' ' + BULAN[d.getMonth()], date:todayStr(), sport:sport, courts: last ? last.courts : 3, lokasi: (last && last.lokasi) || '', copyPresent:false};
     return applySport(f, sport, last && last.sport === sport ? last : null);
   }
   function applySport(f, sport, from){
@@ -288,7 +301,7 @@
     return '<div class="btns" style="margin:0 0 12px"><button class="btn" data-back-list>← Batal</button></div>' +
       '<div class="panel glass" style="max-width:760px"><h2 style="margin-top:0">Mabar baru</h2><div class="formgrid">' +
       '<label class="field"><span>Nama mabar</span><input data-mf="name" value="' + esc(f.name) + '" maxlength="50"></label>' +
-      '<label class="field"><span>Lokasi</span><input data-mf="lokasi" value="' + esc(f.lokasi || '') + '" placeholder="GOR Sadewa" maxlength="50"></label>' +
+      '<label class="field"><span>Lokasi</span><input data-mf="lokasi" value="' + esc(f.lokasi || '') + '" placeholder="Contoh: GOR Sadewa" maxlength="50" required></label>' +
       '<label class="field"><span>Tanggal</span><input type="date" data-mf="date" value="' + f.date + '"></label>' +
       '<label class="field"><span>Cabang</span>' + sel('sport', Object.keys(SPORTS).map(function(k){ return [k,k]; }), f.sport) + '</label>' +
       '<label class="field"><span>Jenis</span>' + sel('jenis', [['ganda','Ganda'],['tunggal','Tunggal']], f.jenis) + '</label>' +
@@ -311,9 +324,18 @@
     }).join('') + '</div>';
   }
   function holders(e, c){ var x = ((e.lap || {})[c.id] || {}).pegang || {}; return Object.keys(x).map(function(u){ return {uid:u, name:x[u]}; }); }
+  function holdLine(e, c, hs){
+    if (VIEW || !canScore()) return '';
+    var P = store.isAdmin && store.mode === 'cloud' && e.status === 'aktif';
+    var names = hs.map(function(h){ return '<span class="holder">' + esc(h.name) + (h.uid === store.uid ? ' (perangkat ini)' : '') + (P ? '<button class="x" data-release="' + c.id + ':' + h.uid + '" aria-label="Lepas ' + esc(h.name) + ' dari lapangan ' + c.id + '">Lepas</button>' : '') + '</span>'; }).join('');
+    var free = P ? devices().filter(function(dv){ return !hs.some(function(h){ return h.uid === dv.uid; }); }) : [];
+    var assign = P && free.length ? '<select class="assign" data-assign="' + c.id + '" aria-label="Tunjuk wasit lapangan ' + c.id + '"><option value="">+ Tunjuk wasit…</option>' + free.map(function(dv){ return '<option value="' + dv.uid + '">' + esc(dv.name) + (dv.peran === 'panitia' ? ' (panitia)' : '') + '</option>'; }).join('') + '</select>' : '';
+    if (!hs.length && !assign) return '';
+    return '<div class="holdline"><span class="muted">Dipegang:</span>' + (names || '<span class="muted">belum ada</span>') + assign + (hs.length > 1 ? '<b class="l">Lebih dari satu perangkat memegang lapangan ini.</b>' : '') + '</div>';
+  }
   function courtCard(e, c){
     var mine = myCourts(e), A = canScore() && e.status === 'aktif' && (!mine.length || mine.indexOf(c.id) > -1);
-    var hs = holders(e, c), hold = (!VIEW && hs.length) ? '<p class="hint" style="margin:0 0 6px">Dipegang: ' + hs.map(function(h){ return esc(h.name) + (h.uid === store.uid ? ' (perangkat ini)' : ''); }).join(', ') + (hs.length > 1 ? ' <b class="l">Lebih dari satu perangkat memegang lapangan ini.</b>' : '') + '</p>' : '';
+    var hs = holders(e, c), hold = holdLine(e, c, hs);
     if (c.match){
       var m = c.match, pa = Math.round(expA(m.a, m.b) * 100), g = play(e.rules, m.pts);
       var h = '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag live">Berjalan ' + mins(m.start) + ' mnt</span></div>' + hold +
@@ -323,6 +345,8 @@
         '<button class="ptbtn b" data-point="' + c.id + ':1" ' + (g.done ? 'disabled' : '') + ' aria-label="Poin untuk merah"><span>+1 Merah</span><b>' + (g.labels[1] || '–') + '</b></button></div>';
       else h += '<div class="bigscore"><b class="ca">' + (g.labels[0] || '') + '</b><span>–</span><b class="cb">' + (g.labels[1] || '') + '</b></div>';
       if (g.sub) h += '<p class="center muted" style="margin:8px 0 0;font-weight:600">' + esc(g.sub) + '</p>';
+      var wn = m.by ? m.by.name : (hs.length === 1 ? hs[0].name : '');
+      if (wn) h += '<p class="center muted" style="margin:6px 0 0;font-size:13px">Wasit: ' + esc(wn) + '</p>';
       if (g.flag) h += '<p class="center" style="margin:6px 0 0"><span class="tag prop">' + g.flag + '</span></p>';
       if (g.done) h += '<div class="gameover">' + (g.w === 0 ? 'Biru' : 'Merah') + ' menang ' + esc(g.text) + (A ? '. Tekan Simpan hasil.' : '.') + '</div>';
       if (A) h += '<div class="btns"><button class="btn primary" data-finish="' + c.id + '">Simpan hasil</button><button class="btn" data-undo="' + c.id + '" ' + (m.pts.length ? '' : 'disabled') + '>Batal poin</button><button class="btn danger" data-abort="' + c.id + '">Batalkan</button></div>';
@@ -387,7 +411,16 @@
     return '<div class="toolbar"><p class="muted" style="margin:0">' + fmtDate(e.date) + ', ' + r.count + ' pertandingan</p><div class="seg glass" role="group" aria-label="Urutkan">' + seg('menang','Menang terbanyak') + seg('persen','% menang') + seg('selisih','Selisih ' + unit) + '</div></div>' +
       '<div class="tw glass"><table>' + head + '<tbody>' + (r.rows.map(tr).join('') || '<tr><td></td><td colspan="6">Belum ada pertandingan di mabar ini.</td></tr>') + '</tbody></table></div>' +
       '<p class="hint">Klasemen hanya menghitung pertandingan di mabar ini. Ketuk nama untuk melihat profil pemain.</p>' +
-      (r.rows.length ? '<div class="btns"><button class="btn" data-share-rank>Bagikan ke WhatsApp</button></div>' : '');
+      (r.rows.length ? '<div class="btns"><button class="btn" data-share-rank>Bagikan ke WhatsApp</button></div>' : '') + resultsList(e);
+  }
+  function resultsList(e){
+    var ms = evMatches(e.id).slice().reverse();
+    if (!ms.length) return '';
+    return '<h3 style="margin-top:22px">Hasil pertandingan</h3><div class="panel glass"><ul class="res">' + ms.map(function(m){
+      var w = winner(m), ta = m.a.map(nm).map(esc).join(' / '), tb = m.b.map(nm).map(esc).join(' / ');
+      var tm = new Date(m.t), jam = String(tm.getHours()).padStart(2,'0') + '.' + String(tm.getMinutes()).padStart(2,'0');
+      return '<li><span><b' + (w === 0 ? '' : ' class="muted"') + '>' + ta + '</b> vs <b' + (w === 1 ? '' : ' class="muted"') + '>' + tb + '</b><br><small class="muted">Lap. ' + m.court + ', ' + jam + (m.wasit ? ', wasit ' + esc(m.wasit) : '') + '</small></span><span>' + esc(m.skor || (m.sa + '–' + m.sb)) + '</span></li>';
+    }).join('') + '</ul></div>';
   }
   function shareRank(e){
     var r = rankRows(e), unit = e.rules.type === 'tennis' ? 'game' : 'poin';
@@ -441,7 +474,9 @@
     return '<div class="grid2"><div class="panel glass"><h3>Komunitas</h3>' + communityForm(cfg()) + '<div class="btns"><button class="btn primary" data-savesettings>Simpan</button></div></div>' +
       '<div class="panel glass"><h3>Data</h3><p class="muted" style="margin:0">' + (local ? 'Mode lokal: data hanya tersimpan di browser perangkat ini. Unduh cadangan secara berkala.' : 'Mode online: data tersimpan di Firebase dan tersinkron ke semua perangkat.') + '</p>' +
       '<div class="btns"><button class="btn" data-export>Unduh cadangan (JSON)</button><label class="btn" style="display:inline-block">Pulihkan dari cadangan<input type="file" id="importFile" accept="application/json,.json" hidden></label></div>' +
-      '<div class="btns"><button class="btn danger" data-wipe>Hapus semua pemain, mabar, dan turnamen</button></div></div>' +
+      '<div class="btns"><button class="btn danger" data-wipe>Hapus semua pemain, mabar, dan turnamen</button></div>' +
+      '<h3 style="margin-top:18px">Hapus komunitas</h3><p class="muted" style="margin:0">Menghapus komunitas <b>' + esc(cfg().name || KID) + '</b> beserta seluruh datanya, termasuk perangkat panitia dan wasit. Tautan dan QR penonton tidak bisa dibuka lagi, dan kode komunitas <b>' + esc(KID) + '</b> tidak bisa dipakai ulang. Tindakan ini tidak bisa dibatalkan, jadi unduh cadangan dulu jika perlu.</p>' +
+      '<div class="btns"><button class="btn danger" data-delkom>Hapus komunitas ini</button></div></div>' +
       (store.mode === 'cloud' ? viewDevices() : '') + '</div>';
   }
 
@@ -457,7 +492,7 @@
     var pts = h.map(function(r, i){ return ((i / (h.length - 1 || 1)) * 300).toFixed(1) + ',' + (66 - ((r - mn) / (mx - mn)) * 60).toFixed(1); }).join(' ');
     var last = mine.slice(-5).reverse().map(function(m){
       var inA = m.a.indexOf(id) > -1, tm = inA ? m.a : m.b, op = inA ? m.b : m.a, mate = tm.filter(function(x){ return x !== id; })[0], ev = getEv(m.ev);
-      return '<li><span><span class="' + (won(m) ? 'w' : 'l') + '">' + (won(m) ? 'M' : 'K') + '</span> ' + (mate ? 'bersama ' + esc(nm(mate)) + ' ' : '') + 'melawan ' + op.map(nm).map(esc).join(' / ') + (ev ? '<br><small class="muted">' + esc(ev.name) + '</small>' : '') + '</span><span>' + esc(m.skor ? (inA ? m.skor : flipSkor(m.skor)) : (inA ? m.sa + '–' + m.sb : m.sb + '–' + m.sa)) + '</span></li>';
+      return '<li><span><span class="' + (won(m) ? 'w' : 'l') + '">' + (won(m) ? 'M' : 'K') + '</span> ' + (mate ? 'bersama ' + esc(nm(mate)) + ' ' : '') + 'melawan ' + op.map(nm).map(esc).join(' / ') + (ev || m.wasit ? '<br><small class="muted">' + (ev ? esc(ev.name) : '') + (m.wasit ? (ev ? ', ' : '') + 'wasit ' + esc(m.wasit) : '') + '</small>' : '') + '</span><span>' + esc(m.skor ? (inA ? m.skor : flipSkor(m.skor)) : (inA ? m.sa + '–' + m.sb : m.sb + '–' + m.sa)) + '</span></li>';
     }).join('');
     $('dlgBody').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div><h2>' + esc(p.name) + '</h2><span class="muted">' + (p.guest ? 'Tamu' : 'Anggota') + '</span></div><button class="btn" data-close>Tutup</button></div>' +
       '<div class="kv"><div><b>' + p.rating + '</b><span>rating</span></div><div><b>' + mine.length + '</b><span>total main</span></div><div><b>' + w + '</b><span>menang</span></div><div><b>' + (mine.length ? Math.round(w / mine.length * 100) : 0) + '%</b><span>% menang</span></div></div>' +
@@ -542,6 +577,7 @@
     if (PICK){ $('subnav').innerHTML = ''; $('app').innerHTML = viewLanding(); return; }
     if (VIEW && !KID){ $('subnav').innerHTML = ''; $('app').innerHTML = '<div class="panel glass empty-state center"><h2>Pindai QR dari panitia</h2><p class="muted">Tautan ini belum menyebutkan komunitas. Buka tautan atau QR yang dibagikan panitia.</p></div>'; return; }
     if (!store.ready){ $('subnav').innerHTML = ''; $('app').innerHTML = '<p class="muted">Memuat…</p>'; return; }
+    if (st().dihapus){ forgetCommunity(KID); $('subnav').innerHTML = ''; $('app').innerHTML = '<div class="panel glass empty-state center"><h2>Komunitas ini sudah dihapus</h2><p class="muted">Panitia telah menghapus komunitas ini beserta seluruh datanya.</p>' + (VIEW ? '' : '<button class="btn primary" data-pilih>Komunitas lain</button>') + '</div>'; return; }
     if (store.error && store.error !== ui.lastErr){ ui.lastErr = store.error; toast(store.error); }
     if (!st().settings){ $('subnav').innerHTML = ''; $('app').innerHTML = viewSetup(); return; }
     if (!VIEW && !store.role){ $('subnav').innerHTML = ''; $('app').innerHTML = store.uid ? viewClaim() : viewSetup(); return; }
@@ -565,7 +601,7 @@
   function saveMatch(e, c, g){
     var m = c.match, w = g.done ? g.w : g.lead;
     var ea = expA(m.a, m.b), d = Math.round(24 * ((w === 0 ? 1 : 0) - ea)), t = Date.now(), paths = {};
-    paths['matches/' + uid('g')] = {ev:e.id, a:m.a, b:m.b, sa:g.tot[0], sb:g.tot[1], w:w, skor:g.text, t:t, start:m.start, court:c.id, delta:d};
+    paths['matches/' + uid('g')] = {ev:e.id, a:m.a, b:m.b, sa:g.tot[0], sb:g.tot[1], w:w, skor:g.text, t:t, start:m.start, court:c.id, delta:d, wasit:deviceName(store.uid), wasitUid:store.uid, mulaiOleh:m.by ? m.by.name : null};
     function upd(ids, delta){ ids.forEach(function(i){ var p = byId(i), r = (p.rating || 1500) + delta; paths['members/' + i + '/rating'] = r; paths['members/' + i + '/hist'] = arr(p.hist).concat([{t:t, r:r}]).slice(-300); }); }
     upd(m.a, d); upd(m.b, -d);
     paths[evPath(e, 'lap/' + c.id + '/match')] = null;
@@ -645,13 +681,13 @@
     if (e && e.status === 'aktif' && canScore()){
       if (d.mine){ var cid = +d.mine, mine = myCourts(e), on = mine.indexOf(cid) < 0;
         mine = on ? mine.concat([cid]).sort() : mine.filter(function(x){ return x !== cid; });
-        lsSet(mineKey(e), JSON.stringify(mine));
+        if (store.mode !== 'cloud') lsSet(mineKey(e), JSON.stringify(mine));
         if (store.mode === 'cloud'){ var mu = {}; mu[evPath(e, 'lap/' + cid + '/pegang/' + store.uid)] = on ? deviceName(store.uid) : null; store.update(mu); }
         return render(); }
       if (d.compose){ var k = slotsN(e), blank = []; for (var i = 0; i < k; i++) blank.push(0); store.update({[evPath(e, 'lap/' + d.compose + '/draft')]:{a:blank, b:blank.slice()}}); return render(); }
       if (d.swapsides){ var c3 = courtOf(e, d.swapsides); store.update({[evPath(e, 'lap/' + c3.id + '/draft')]:{a:c3.draft.b, b:c3.draft.a}}); return render(); }
       if (d.cancel){ store.update({[evPath(e, 'lap/' + d.cancel + '/draft')]:null}); return render(); }
-      if (d.start){ var c4 = courtOf(e, d.start); var su = {}; su[evPath(e, 'lap/' + c4.id + '/match')] = {a:c4.draft.a, b:c4.draft.b, pts:[], start:Date.now()}; su[evPath(e, 'lap/' + c4.id + '/draft')] = null; store.update(su); toast('Lapangan ' + c4.id + ' dimulai.'); return render(); }
+      if (d.start){ var c4 = courtOf(e, d.start); var su = {}; su[evPath(e, 'lap/' + c4.id + '/match')] = {a:c4.draft.a, b:c4.draft.b, pts:[], start:Date.now(), by:{uid:store.uid, name:deviceName(store.uid)}}; su[evPath(e, 'lap/' + c4.id + '/draft')] = null; store.update(su); toast('Lapangan ' + c4.id + ' dimulai.'); return render(); }
       if (d.point){ var pp = d.point.split(':'), c5 = courtOf(e, pp[0]); if (!c5 || !c5.match || play(e.rules, c5.match.pts).done) return;
         if (navigator.vibrate) navigator.vibrate(20);
         store.update({[evPath(e, 'lap/' + c5.id + '/match/pts')]:c5.match.pts.concat([+pp[1]])}); return render(); }
@@ -672,6 +708,16 @@
       return;
     }
     if (t.hasAttribute('data-newrecovery')) return makeRecovery();
+    if (d.release && e){ var rl = d.release.split(':'), ru = {}; ru[evPath(e, 'lap/' + rl[0] + '/pegang/' + rl[1])] = null; store.update(ru); toast('Lapangan ' + rl[0] + ' dilepas.'); return render(); }
+    if (t.hasAttribute('data-delkom')){
+      var nmk = cfg().name || KID, ans = prompt('Ketik kode komunitas "' + KID + '" untuk menghapus komunitas "' + nmk + '" secara permanen.');
+      if (ans === null) return;
+      if (ans.trim() !== KID){ toast('Kode tidak cocok. Komunitas tidak dihapus.'); return; }
+      t.disabled = true;
+      store.deleteCommunity().then(function(){ forgetCommunity(KID); toast('Komunitas dihapus.'); setTimeout(function(){ location.href = appUrl('pilih=1'); }, 900); })
+        .catch(function(err){ t.disabled = false; toast('Gagal menghapus: ' + (err && err.message || err)); });
+      return;
+    }
     if (d.revoke){ var rk = d.revoke.split(':'), isW = rk[0] === 'wasit'; if (!confirm('Cabut akses ' + rk[0] + ' dari perangkat ini?')) return; var rv = {}; rv[(isW ? 'wasit/' : 'owners/') + rk[1]] = null; rv[(isW ? 'wasitNames/' : 'ownerNames/') + rk[1]] = null; store.update(rv); return render(); }
     if (t.hasAttribute('data-savesettings')){ store.update({settings:readCommunity()}); toast('Tersimpan.'); return render(); }
     if (t.hasAttribute('data-export')){ var ex = JSON.parse(JSON.stringify(st())); delete ex.owners; delete ex.ownerNames; delete ex.wasit; delete ex.wasitNames; download('skor-mabar-cadangan-' + todayStr() + '.json', JSON.stringify(ex, null, 2)); return; }
@@ -732,6 +778,11 @@
       r.onload = function(){ try { var o = JSON.parse(r.result); if (!o.settings) throw 0; if (!confirm('Ganti data pemain, mabar, dan turnamen dengan isi cadangan ini?')) return;
         store.update({settings:o.settings, members:o.members || null, matches:o.matches || null, events:o.events || null, tournaments:o.tournaments || null}); toast('Data dipulihkan.'); render(); } catch(err){ toast('File cadangan tidak valid.'); } };
       r.readAsText(x.files[0]); return;
+    }
+    if (x.dataset && x.dataset.assign && store.isAdmin && x.value){
+      var ea = ui.view === 'event' ? getEv(ui.ev) : null; if (!ea) return;
+      var au = {}; au[evPath(ea, 'lap/' + x.dataset.assign + '/pegang/' + x.value)] = deviceName(x.value);
+      store.update(au); toast(deviceName(x.value) + ' ditunjuk di Lapangan ' + x.dataset.assign + '.'); x.blur(); return render();
     }
     if (x.dataset && x.dataset.slotsel && canScore()){
       var e = ui.view === 'event' ? getEv(ui.ev) : null; if (!e || e.status !== 'aktif') return;

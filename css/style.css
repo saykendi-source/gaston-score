@@ -249,3 +249,7 @@ td small.w,td small.l{font-size:12px}
 .minebar b{margin-right:4px}
 .minebar .chip{cursor:pointer}
 code{font-size:.9em;background:var(--glass-hi);padding:1px 5px;border-radius:6px}
+.holdline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px;margin:0 0 8px}
+.holder{display:inline-flex;align-items:center;gap:4px;font-weight:600;background:var(--glass-hi);border-radius:999px;padding:3px 10px}
+.holder .x{font-size:12px;padding:0 0 0 4px}
+.assign{border:1px solid var(--hair);background:var(--glass-hi);border-radius:999px;padding:4px 10px;font-size:13px;font-weight:600}

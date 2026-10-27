@@ -99,6 +99,17 @@
         return dbm.get(secretRef()).then(function(x){ return x.val() || {}; });
       },
 
+      /* Menghapus komunitas: data rahasia dihapus, lalu data komunitas diganti tanda "dihapus"
+         agar kode komunitas tidak bisa diklaim ulang. */
+      deleteCommunity: function(){
+        if (s.mode === 'local'){
+          try { localStorage.removeItem(LS_SECRET); } catch(e){}
+          state = norm({dihapus:Date.now()}); saveLocal(); emit();
+          return Promise.resolve();
+        }
+        return dbm.remove(secretRef()).then(function(){ return dbm.set(base(), {dihapus:Date.now()}); });
+      },
+
       /* Mendaftarkan perangkat ini dengan kode undangan/pemulihan.
          Dicoba sebagai panitia dulu; jika kodenya kode wasit, aturan database menolak, lalu dicoba sebagai wasit. */
       claim: function(code, label){
