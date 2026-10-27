@@ -244,3 +244,4 @@ td small.w,td small.l{font-size:12px}
 .evopen:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:12px}
 .evopen:hover b{text-decoration:underline}
 .evopen .muted{font-size:14px}
+.slotsel{flex:1;min-width:150px;border:1px solid var(--hair);background:var(--glass-hi);border-radius:12px;padding:8px 10px;font-weight:600}

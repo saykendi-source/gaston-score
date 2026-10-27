@@ -56,7 +56,7 @@ cd skor-mabar
 npx serve .
 ```
 
-Buka `http://localhost:8080` (atau alamat yang ditampilkan `serve`). Isi form **Siapkan komunitas**, centang **Isi dengan data contoh** untuk mencoba, lalu tekan **Simpan dan mulai**.
+Buka `http://localhost:8080` (atau alamat yang ditampilkan `serve`). Isi form **Siapkan komunitas**, lalu tekan **Simpan dan mulai**.
 
 Di mode lokal, tampilan penonton `http://localhost:8080/lihat.html` hanya bisa dicoba di browser yang sama, misalnya di tab lain. Penonton dari HP lain baru bisa melihat setelah mode online aktif.
 
@@ -180,7 +180,7 @@ Mabar lama tetap tersimpan di daftar. Tekan **Selesaikan** jika sesi sudah usai 
 ### Alur dalam satu mabar
 
 1. **Absensi** → nyalakan sakelar hadir untuk yang datang. Pemain baru atau tamu bisa langsung ditambahkan di sini.
-2. **Lapangan** → di lapangan kosong tekan **Susun pertandingan**, ketuk slot, lalu **Pilih** pemain dari antrean.
+2. **Lapangan** → di lapangan kosong tekan **Susun pertandingan**, lalu pilih pemain dari dropdown di setiap kolom. Dropdown hanya berisi pemain di antrean, diurutkan dari yang paling sedikit main dan paling lama menunggu, lengkap dengan jumlah main dan lama menunggu.
 3. **Mulai main** → catat poin dengan **+1 Biru** dan **+1 Merah**. Untuk tenis dan padel, aplikasi otomatis menghitung 15–30–40, deuce atau golden point, game, set, dan tiebreak.
 4. Setelah pertandingan selesai, tekan **Simpan hasil**.
 5. **Klasemen** → peringkat hanya untuk mabar ini: menang, kalah, persentase menang, dan selisih poin (atau selisih game untuk tenis dan padel).
@@ -292,6 +292,10 @@ Rating memakai Elo dengan K = 24. Rating tim adalah rata-rata rating kedua pemai
 
 ---
 
-## Catatan pembaruan v3
+## Catatan pembaruan
+
+**v4:** opsi data contoh dihapus; pemilihan pemain di lapangan memakai dropdown berisi antrean.
+
+**v3:**
 
 Struktur data berubah (mabar kini disimpan per acara di `events`). Data dari versi sebelumnya tidak terbaca otomatis. Jika Anda sudah sempat memakai versi lama, hapus data lewat Pengaturan lalu mulai lagi.

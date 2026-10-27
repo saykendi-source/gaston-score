@@ -120,9 +120,7 @@
   function evPath(e, p){ return 'events/' + e.id + (p ? '/' + p : ''); }
 
   // ---------- UI state ----------
-  var ui = {mode:'mabar', view:'list', listTab:'daftar', ev:null, tab:'skor', sortBy:'menang', draftCourt:null, activeSlot:null, pendingRender:false, lastErr:null};
-  function order(e){ var o = []; ['a','b'].forEach(function(s){ for (var i = 0; i < slotsN(e); i++) o.push([s, i]); }); return o; }
-  function firstEmpty(e, c){ var o = order(e); for (var i = 0; i < o.length; i++){ if (!c.draft[o[i][0]][o[i][1]]) return o[i]; } return null; }
+  var ui = {mode:'mabar', view:'list', listTab:'daftar', ev:null, tab:'skor', sortBy:'menang', pendingRender:false, lastErr:null};
   function toast(msg){ var el = $('toast'); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function(){ el.hidden = true; }, 2800); }
 
   // ---------- Header & navigasi ----------
@@ -163,7 +161,6 @@
     if (store.mode === 'cloud' && !store.uid) return '<div class="panel glass empty-state center"><h2>Menghubungkan…</h2><p class="muted">Menyiapkan perangkat panitia.</p></div>';
     return '<div class="panel glass empty-state"><h2>Siapkan komunitas</h2><p class="muted">Perangkat yang menyiapkan komunitas otomatis menjadi perangkat panitia. Tidak perlu membuat akun.</p>' + communityForm({}) +
       '<label class="field" style="margin-top:12px"><span>Nama perangkat ini</span><input id="devName" placeholder="Misalnya: HP Andi atau Tablet meja panitia" maxlength="30"></label>' +
-      '<label class="opt"><input type="checkbox" id="sample"><span><b>Isi dengan data contoh</b><span class="muted">14 pemain dan beberapa mabar contoh. Bisa dihapus di Pengaturan.</span></span></label>' +
       '<div class="btns"><button class="btn primary" data-setup>Simpan dan mulai</button></div></div>';
   }
   function communityForm(c){
@@ -256,12 +253,14 @@
   // ---------- Lapangan (dalam mabar) ----------
   function chipTxt(id){ var p = byId(id); return esc(p.name) + ' <small>' + p.rating + '</small>'; }
   function liveRow(side, ids){ return '<div class="team"><span class="side ' + side + '"></span>' + ids.map(function(id){ return '<span class="chip">' + chipTxt(id) + '</span>'; }).join('') + (ids.length > 1 ? '<span class="avg">rata-rata ' + Math.round(avg(ids)) + '</span>' : '') + '</div>'; }
-  function slotRow(c, side){
-    var ids = c.draft[side];
+  function slotRow(e, c, side){
+    var ids = c.draft[side], qu = queue(e);
     return '<div class="team"><span class="side ' + side + '"></span>' + ids.map(function(id, i){
-      var act = ui.draftCourt === c.id && ui.activeSlot && ui.activeSlot[0] === side && ui.activeSlot[1] === i;
-      return id ? '<button class="chip ' + (act ? 'sel' : '') + '" data-slot="' + c.id + ':' + side + ':' + i + '" aria-label="Keluarkan ' + esc(nm(id)) + '">' + chipTxt(id) + ' ✕</button>'
-                : '<button class="slot ' + (act ? 'sel' : '') + '" data-slot="' + c.id + ':' + side + ':' + i + '">' + (act ? 'Pilih dari antrean' : '+ Pemain') + '</button>';
+      var opts = (id ? [id] : []).concat(qu).map(function(pid){
+        var g = games(e, pid), info = g === 0 ? 'belum main' : g + '× main, tunggu ' + mins(lastFree(e, pid)) + ' mnt';
+        return '<option value="' + pid + '" ' + (pid === id ? 'selected' : '') + '>' + esc(nm(pid)) + ' (' + info + ')</option>';
+      }).join('');
+      return '<select class="slotsel" data-slotsel="' + c.id + ':' + side + ':' + i + '" aria-label="Pemain ' + (side === 'a' ? 'biru' : 'merah') + ' ' + (i + 1) + '"><option value="">Pilih pemain…</option>' + opts + '</select>';
     }).join('') + '</div>';
   }
   function courtCard(e, c){
@@ -283,8 +282,8 @@
     if (c.draft && A){
       var full = c.draft.a.concat(c.draft.b).every(Boolean);
       var diff = full ? Math.round(Math.abs(avg(c.draft.a) - avg(c.draft.b))) : 0;
-      return '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag prop">Disusun panitia</span></div>' + slotRow(c, 'a') + slotRow(c, 'b') +
-        '<p class="hint">' + (full ? 'Selisih rating ' + diff + '. Hanya acuan, keputusan di panitia.' : 'Ketuk slot, lalu pilih pemain di antrean.') + '</p>' +
+      return '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag prop">Disusun panitia</span></div>' + slotRow(e, c, 'a') + slotRow(e, c, 'b') +
+        '<p class="hint">' + (full ? 'Selisih rating ' + diff + '. Hanya acuan, keputusan di panitia.' : 'Pilih pemain dari daftar antrean di setiap kolom. Yang paling sedikit main dan paling lama menunggu ada di atas.') + '</p>' +
         '<div class="btns"><button class="btn primary" data-start="' + c.id + '" ' + (full ? '' : 'disabled') + '>Mulai main</button><button class="btn" data-swapsides="' + c.id + '">Tukar sisi</button><button class="btn" data-cancel="' + c.id + '">Batal</button></div></div>';
     }
     return '<div class="court glass"><div class="chead"><b>Lapangan ' + c.id + '</b><span class="tag">' + (c.draft ? 'Sedang disusun' : 'Kosong') + '</span></div>' +
@@ -293,19 +292,17 @@
   function viewSkor(e){
     var A = store.isAdmin && e.status === 'aktif', qu = queue(e), busy = onCourt(e), pres = Object.keys(e.present);
     var never = pres.filter(function(id){ return games(e, id) === 0 && !busy[id]; }).length;
-    var dc = ui.draftCourt && courtOf(e, ui.draftCourt), canPick = A && dc && dc.draft && firstEmpty(e, dc);
     var qHtml = qu.length ? qu.map(function(id, i){
       var g = games(e, id);
       return '<li><span class="rk">' + (i+1) + '</span><span class="nm">' + esc(nm(id)) + '<small>menunggu ' + mins(lastFree(e, id)) + ' mnt, rating ' + byId(id).rating + '</small></span>' +
-        (g === 0 ? '<span class="badge new">Belum main</span>' : '<span class="badge n">' + g + '× main</span>') +
-        (canPick ? '<button class="swapin" data-pick="' + id + '" aria-label="Pilih ' + esc(nm(id)) + '">Pilih</button>' : '') + '</li>';
+        (g === 0 ? '<span class="badge new">Belum main</span>' : '<span class="badge n">' + g + '× main</span>') + '</li>';
     }).join('') : '<li class="muted">' + (pres.length ? 'Semua pemain hadir sedang bermain atau sudah dipilih.' : 'Belum ada yang hadir.' + (A ? ' Tandai kehadiran di tab Absensi.' : '')) + '</li>';
     return '<div class="stats"><div class="stat glass"><b>' + pres.length + '</b><span>pemain hadir</span></div>' +
       '<div class="stat glass"><b>' + evMatches(e.id).length + '</b><span>pertandingan selesai</span></div>' +
       '<div class="stat glass"><b>' + courtsOf(e).filter(function(c){ return c.match; }).length + '/' + courtsOf(e).length + '</b><span>lapangan terpakai</span></div>' +
       '<div class="stat glass"><b>' + never + '</b><span>belum main</span></div></div>' +
       '<div class="cols"><div class="courts">' + courtsOf(e).map(function(c){ return courtCard(e, c); }).join('') + '</div>' +
-      '<div class="panel glass"><h3>Antrean</h3><p class="hint" style="margin:-4px 0 8px">' + (canPick ? 'Memilih untuk Lapangan ' + dc.id + '.' : 'Urutan: jumlah main paling sedikit, lalu menunggu paling lama.') + '</p><ul class="q">' + qHtml + '</ul>' +
+      '<div class="panel glass"><h3>Antrean</h3><p class="hint" style="margin:-4px 0 8px">Urutan: jumlah main paling sedikit, lalu menunggu paling lama.</p><ul class="q">' + qHtml + '</ul>' +
       '<div class="btns"><button class="btn" data-evshare="' + e.id + '">QR mabar ini</button></div></div></div>';
   }
 
@@ -499,7 +496,7 @@
   }
   function softRender(){ if (isTyping()) ui.pendingRender = true; else render(); }
   document.addEventListener('focusout', function(){ setTimeout(function(){ if (ui.pendingRender && !isTyping()) render(); }, 50); });
-  function openEvent(id, tab){ ui.mode = 'mabar'; ui.view = 'event'; ui.ev = id; ui.tab = tab || 'skor'; ui.draftCourt = null; ui.activeSlot = null; if (VIEW) try { history.replaceState(null, '', '#ev=' + id); } catch(err){} render(); window.scrollTo(0, 0); }
+  function openEvent(id, tab){ ui.mode = 'mabar'; ui.view = 'event'; ui.ev = id; ui.tab = tab || 'skor'; if (VIEW) try { history.replaceState(null, '', '#ev=' + id); } catch(err){} render(); window.scrollTo(0, 0); }
   function readHash(){ var m = /ev=([\w-]+)/.exec(location.hash); if (m){ ui.mode = 'mabar'; ui.view = 'event'; ui.ev = m[1]; ui.tab = 'skor'; } }
   window.addEventListener('hashchange', function(){ readHash(); render(); });
 
@@ -513,29 +510,6 @@
     paths[evPath(e, 'lap/' + c.id + '/match')] = null;
     store.update(paths);
     return {d:d, w:w};
-  }
-  function sampleData(){
-    var names = ['Fajar','Rizky','Bagas','Fikri','Dani','Yusuf','Ilham','Reza','Gilang','Tegar','Andre','Farhan','Nadia','Putri'];
-    var mem = {}, skill = {}, ms = {}, evs = {}, ids = [];
-    names.forEach(function(n){ var id = uid('m'); ids.push(id); mem[id] = {name:n, rating:1500, hist:[], guest:false, joined:Date.now()}; skill[id] = 1330 + Math.random() * 380; });
-    var a2 = function(x){ return (mem[x[0]].rating + mem[x[1]].rating) / 2; }, sk = function(x){ return (skill[x[0]] + skill[x[1]]) / 2; };
-    for (var wk = 3; wk >= 0; wk--){
-      var day = new Date(Date.now() - wk * 7 * 864e5), eid = uid('e'), pres = {};
-      ids.forEach(function(id){ if (Math.random() < .82) pres[id] = day.getTime(); });
-      evs[eid] = {type:'mabar', name:'Mabar ' + HARI[day.getDay()] + ' ' + day.getDate() + ' ' + BULAN[day.getMonth()], date:todayStr(day), sport:'Badminton', jenis:'ganda', rules:SPORTS.Badminton, courts:3, status: wk ? 'selesai' : 'aktif', created:day.getTime() - wk, present:pres};
-      if (!wk) break;
-      var t = new Date(day).setHours(19, 0, 0, 0), pl = Object.keys(pres);
-      for (var k = 0; k < 13; k++){
-        var four = pl.slice().sort(function(){ return Math.random() - .5; }).slice(0, 4), A = [four[0], four[3]], B = [four[1], four[2]];
-        var winA = Math.random() < 1 / (1 + Math.pow(10, (sk(B) - sk(A)) / 400)), lo = 9 + Math.floor(Math.random() * 11);
-        var sa = winA ? 21 : lo, sb = winA ? lo : 21, e2 = 1 / (1 + Math.pow(10, (a2(B) - a2(A)) / 400)), d = Math.round(24 * ((winA ? 1 : 0) - e2));
-        t += 14 * MIN;
-        A.forEach(function(i){ mem[i].rating += d; mem[i].hist.push({t:t, r:mem[i].rating}); });
-        B.forEach(function(i){ mem[i].rating -= d; mem[i].hist.push({t:t, r:mem[i].rating}); });
-        ms[uid('g')] = {ev:eid, a:A, b:B, sa:sa, sb:sb, w:winA ? 0 : 1, skor:sa + '–' + sb, t:t, start:t - 13 * MIN, court:1 + k % 3, delta:d};
-      }
-    }
-    return {members:mem, matches:ms, events:evs};
   }
   function download(name, text){
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type:'application/json'})); a.download = name;
@@ -593,7 +567,6 @@
     if (t.hasAttribute('data-setup') && !st().settings && !VIEW){
       var paths = {settings:readCommunity()}, dev = ($('devName') && $('devName').value.trim()) || 'Perangkat pendiri';
       if (store.mode === 'cloud'){ paths['owners/' + store.uid] = 'pendiri'; paths['ownerNames/' + store.uid] = {name:dev, at:Date.now()}; }
-      if ($('sample') && $('sample').checked){ var sd = sampleData(); paths.members = sd.members; paths.matches = sd.matches; paths.events = sd.events; }
       t.disabled = true;
       store.update(paths).then(function(){ ui.view = 'list'; ui.listTab = 'daftar'; render(); toast('Komunitas siap.'); if (store.mode === 'cloud') makeRecovery(); })
         .catch(function(){ t.disabled = false; toast('Gagal menyimpan. Mungkin komunitas ini sudah disiapkan perangkat lain.'); });
@@ -635,13 +608,10 @@
 
     // Dalam mabar
     if (e && e.status === 'aktif'){
-      if (d.compose){ var k = slotsN(e), blank = []; for (var i = 0; i < k; i++) blank.push(0); store.update({[evPath(e, 'lap/' + d.compose + '/draft')]:{a:blank, b:blank.slice()}}); ui.draftCourt = +d.compose; ui.activeSlot = ['a',0]; return render(); }
-      if (d.slot){ var sp = d.slot.split(':'), c = courtOf(e, sp[0]); if (!c || !c.draft) return; c.draft[sp[1]][+sp[2]] = 0; ui.draftCourt = c.id; ui.activeSlot = [sp[1], +sp[2]]; store.update({[evPath(e, 'lap/' + c.id + '/draft')]:c.draft}); return render(); }
-      if (d.pick){ var c2 = courtOf(e, ui.draftCourt); if (!c2 || !c2.draft) return; var s2 = ui.activeSlot; if (!s2 || c2.draft[s2[0]][s2[1]]) s2 = firstEmpty(e, c2); if (!s2) return;
-        c2.draft[s2[0]][s2[1]] = d.pick; ui.activeSlot = firstEmpty(e, c2); store.update({[evPath(e, 'lap/' + c2.id + '/draft')]:c2.draft}); return render(); }
+      if (d.compose){ var k = slotsN(e), blank = []; for (var i = 0; i < k; i++) blank.push(0); store.update({[evPath(e, 'lap/' + d.compose + '/draft')]:{a:blank, b:blank.slice()}}); return render(); }
       if (d.swapsides){ var c3 = courtOf(e, d.swapsides); store.update({[evPath(e, 'lap/' + c3.id + '/draft')]:{a:c3.draft.b, b:c3.draft.a}}); return render(); }
-      if (d.cancel){ store.update({[evPath(e, 'lap/' + d.cancel + '/draft')]:null}); if (ui.draftCourt == d.cancel){ ui.draftCourt = null; ui.activeSlot = null; } return render(); }
-      if (d.start){ var c4 = courtOf(e, d.start); store.update({[evPath(e, 'lap/' + c4.id)]:{match:{a:c4.draft.a, b:c4.draft.b, pts:[], start:Date.now()}}}); ui.draftCourt = null; ui.activeSlot = null; toast('Lapangan ' + c4.id + ' dimulai.'); return render(); }
+      if (d.cancel){ store.update({[evPath(e, 'lap/' + d.cancel + '/draft')]:null}); return render(); }
+      if (d.start){ var c4 = courtOf(e, d.start); store.update({[evPath(e, 'lap/' + c4.id)]:{match:{a:c4.draft.a, b:c4.draft.b, pts:[], start:Date.now()}}}); toast('Lapangan ' + c4.id + ' dimulai.'); return render(); }
       if (d.point){ var pp = d.point.split(':'), c5 = courtOf(e, pp[0]); if (!c5 || !c5.match || play(e.rules, c5.match.pts).done) return;
         if (navigator.vibrate) navigator.vibrate(20);
         store.update({[evPath(e, 'lap/' + c5.id + '/match/pts')]:c5.match.pts.concat([+pp[1]])}); return render(); }
@@ -684,6 +654,12 @@
       r.onload = function(){ try { var o = JSON.parse(r.result); if (!o.settings) throw 0; if (!confirm('Ganti data pemain, mabar, dan turnamen dengan isi cadangan ini?')) return;
         store.update({settings:o.settings, members:o.members || null, matches:o.matches || null, events:o.events || null, tournaments:o.tournaments || null}); toast('Data dipulihkan.'); render(); } catch(err){ toast('File cadangan tidak valid.'); } };
       r.readAsText(x.files[0]); return;
+    }
+    if (x.dataset && x.dataset.slotsel && store.isAdmin){
+      var e = ui.view === 'event' ? getEv(ui.ev) : null; if (!e || e.status !== 'aktif') return;
+      var sp = x.dataset.slotsel.split(':'), c = courtOf(e, sp[0]); if (!c || !c.draft) return;
+      c.draft[sp[1]][+sp[2]] = x.value || 0;
+      store.update({[evPath(e, 'lap/' + c.id + '/draft')]:c.draft}); x.blur(); return render();
     }
     if (x.dataset && x.dataset.mf && mf){
       var k = x.dataset.mf;
